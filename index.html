@@ -79,7 +79,7 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;bac
 .dot{width:12px;height:12px;border-radius:50%}
 .pinwrap{background:none;border:0}
 .pin{position:relative;display:grid;place-items:center;width:30px;height:30px;border-radius:50%;border:2.5px solid #fff;font-size:15px;line-height:1;box-shadow:0 1px 4px rgba(0,0,0,.35)}
-.pin.walk{background:var(--walk)} .pin.ride{background:var(--ride)}
+.pin.walk{background:var(--walk)} .pin.ride{background:var(--ride);width:24px;height:24px;margin:3px;font-size:12px}
 .pin.sel{border:4px solid var(--amber);transform:scale(1.18)}
 .pin .num{position:absolute;top:-9px;right:-9px;width:19px;height:19px;border-radius:50%;background:var(--amber);color:#fff;border:2px solid #fff;font:800 12px/15px var(--display);text-align:center}
 .you{width:18px;height:18px;border-radius:50%;background:var(--amber);border:3px solid #fff;box-shadow:0 0 0 7px rgba(176,108,14,.28)}
@@ -129,6 +129,23 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;bac
 .pop .actions a{font-size:13px;padding:7px 11px;color:var(--ink)}
 .pop .actions a.primary{color:var(--surface)}
 .actions .skip{font-weight:700}
+.favs{display:grid;gap:8px}
+.favs > label{font-weight:700}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chips:empty{display:none}
+.chip{display:inline-flex;align-items:center;gap:4px;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:4px 4px 4px 12px;font-size:14px}
+.chip button{border:0;background:transparent;color:var(--muted);font-size:18px;line-height:1;padding:2px 8px;border-radius:999px}
+.picks{margin-top:16px;border-top:1px solid var(--line);padding-top:14px;display:grid;gap:10px}
+.picks h4{margin:0;font:800 22px/1 var(--display)}
+.picks .actions{margin-top:0}
+.pick .bn{font-weight:700}
+.pick .bm{color:var(--muted);font-size:14px}
+.source{font-size:13px;color:var(--muted);border-left:3px solid var(--amber);padding-left:10px}
+details.keybox{font-size:14px;color:var(--muted)}
+details.keybox summary{cursor:pointer;padding:4px 0}
+details.keybox p{margin:6px 0}
+.actions button.btn{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:9px 14px;font-weight:700;font-size:15px;border:1px solid var(--amber);background:var(--amber);color:var(--surface)}
+.actions button.btn:disabled{opacity:.55}
 footer{margin-top:28px;color:var(--muted);font-size:13px}
 </style>
 </head>
@@ -159,6 +176,15 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
         <label for="walk">Walk to first brewery <output id="walkOut" for="walk"></output></label>
         <input type="range" id="walk" min="0.25" max="2.5" step="0.25" value="1">
         <p class="walkinfo" id="walkInfo" aria-live="polite"></p>
+      </div>
+      <div class="favs">
+        <label for="favInput">Beers you like</label>
+        <form class="row-form" id="favForm" autocomplete="off">
+          <input id="favInput" placeholder="e.g. Pliny the Elder, hazy IPAs" maxlength="80">
+          <button type="submit">Add</button>
+        </form>
+        <div class="chips" id="chips"></div>
+        <p class="hint" id="favHint"></p>
       </div>
     </div>
   </section>
@@ -227,7 +253,8 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
     here: null, breweries: [], selected: null, busy: false,
     walk: Number(store.get("bw.walk", 1)) || 1,
     crawl: Object.assign({stops:4, leg:0.75, total:2.5, uber:false}, store.get("bw.crawl", {})),
-    skip: new Set(), route: null, start: null, note: ""
+    skip: new Set(), route: null, start: null, note: "",
+    favs: store.get("bw.favs", []), picks: {}, apiKey: store.get("bw.key", "")
   };
 
   // ---------- helpers ----------
@@ -398,7 +425,7 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
       el("div", {class:"actions"},
         w ? el("a", {class:"primary", href:dirLink(b, "walking"), target:"_blank", rel:"noopener"}, "🚶 Directions")
           : el("a", {class:"primary", href:uberLink(b), target:"_blank", rel:"noopener"}, "🚗 Uber"),
-        el("a", {href:"#detail", onclick:e => { e.preventDefault(); map.closePopup(); $("detail").scrollIntoView({behavior:smooth(), block:"start"}); }}, "More")));
+        el("a", {href:"#detail", onclick:e => { e.preventDefault(); map.closePopup(); $("detail").scrollIntoView({behavior:smooth(), block:"start"}); }}, "Details & beer picks")));
   }
   function showRouteOnMap(){
     const r = state.route;
@@ -450,7 +477,89 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
         w ? el("a", {href:uberLink(b), target:"_blank", rel:"noopener"}, "🚗 Uber instead")
           : el("a", {href:gm, target:"_blank", rel:"noopener"}, "Driving directions"),
         el("a", {href:untappdLink(b), target:"_blank", rel:"noopener"}, "🍺 Beers on Untappd"),
-        b.web ? el("a", {href:b.web, target:"_blank", rel:"noopener"}, "Website") : null)));
+        b.web ? el("a", {href:b.web, target:"_blank", rel:"noopener"}, "Website") : null),
+      picksBlock(b)));
+  }
+
+  // ---------- beer picks ----------
+  if (!Array.isArray(state.favs)) state.favs = [];
+  function favsChanged(){ store.set("bw.favs", state.favs); state.picks = {}; renderFavs(); renderDetail(); renderCrawl(); }
+  function renderFavs(){
+    $("chips").replaceChildren(...state.favs.map((f, i) => el("span", {class:"chip"}, f,
+      el("button", {type:"button", "aria-label":"Remove " + f, onclick:() => { state.favs.splice(i, 1); favsChanged(); }}, "×"))));
+    $("favHint").textContent = state.favs.length
+      ? "Open any brewery to see what to order there."
+      : "Add a few beers or styles you like to get picks at each brewery.";
+  }
+  $("favForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const v = $("favInput").value.trim();
+    if (v && state.favs.length < 12 && !state.favs.some(f => f.toLowerCase() === v.toLowerCase())) { state.favs.push(v); favsChanged(); }
+    $("favInput").value = "";
+  });
+  const likes = () => state.favs.join(", ");
+  function claudeLink(stops){
+    const where = stops.map(b => b.name + (b.address ? " (" + b.address + ")" : "")).join("; ");
+    const q = stops.length > 1
+      ? "I'm doing a brewery crawl, in this order: " + where + ". Beers I like: " + likes() + ". Check each brewery's current tap list and Untappd ratings (search the web), then suggest 1-2 beers I should order at each stop and why, as a short list per stop."
+      : "I'm heading to " + where + ". Beers I like: " + likes() + ". Check the brewery's current tap list and Untappd ratings (search the web), then suggest 3-4 beers I should order there and why, as a short list.";
+    return "https://claude.ai/new?q=" + enc(q.slice(0, 1800));
+  }
+  async function getPicks(b){
+    state.picks[b.id] = {loading:true}; renderDetail();
+    const prompt = "A beer drinker likes: " + likes() + ".\nThey are visiting " + b.name + (b.address ? " (" + b.address + ")" : "") + ".\n" +
+      "Using what you know about this brewery's beers and how they rate on Untappd, suggest up to 4 beers they should order there. Favor core and flagship beers, since tap lists rotate. Only name beers you believe this brewery actually makes; never invent one. Ratings are approximate Untappd averages on the 5-point scale, or empty if unsure.\n" +
+      'Return ONLY JSON: {"picks":[{"beer":"","style":"","abv":"","rating":"","why":"one sentence tying it to their favorites"}],"note":"short caveat if your knowledge of this brewery is thin, else empty"}';
+    try {
+      const res = await fetch("https://api.anthropic.com/v1/messages", {method:"POST",
+        headers:{"content-type":"application/json", "x-api-key":state.apiKey, "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access":"true"},
+        body:JSON.stringify({model:"claude-haiku-5-5", max_tokens:900, messages:[{role:"user", content:prompt}]})});
+      if (res.status === 401) throw new Error("That API key didn’t work. Check it under “Use your own API key” below.");
+      if (!res.ok) throw new Error("Claude didn’t respond. Try again in a moment, or use Ask Claude.");
+      const text = (await res.json()).content.map(c => c.text || "").join("");
+      const d = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
+      state.picks[b.id] = {items:(Array.isArray(d.picks) ? d.picks : []).filter(p => p && p.beer).slice(0, 4), note:d.note || ""};
+    } catch (e) {
+      state.picks[b.id] = {error:e instanceof SyntaxError ? "Claude’s answer came back garbled. Try again." : (e.message || "Claude didn’t respond. Try again in a moment.")};
+    }
+    if (state.selected === b.id) renderDetail();
+  }
+  function keyBox(){
+    const inp = el("input", {type:"password", placeholder:state.apiKey ? "Key saved. Paste a new one to replace it" : "sk-ant-…", "aria-label":"Anthropic API key", autocomplete:"off"});
+    return el("details", {class:"keybox"},
+      el("summary", {}, state.apiKey ? "Using your own API key" : "Use your own API key (optional)"),
+      el("p", {}, "Paste an Anthropic API key to get picks without leaving this page. It’s saved only in this browser, and usage is billed to your key."),
+      el("form", {class:"row-form", onsubmit:e => { e.preventDefault(); const v = inp.value.trim(); if (v) { state.apiKey = v; store.set("bw.key", v); renderDetail(); } }},
+        inp, el("button", {type:"submit"}, "Save"),
+        state.apiKey ? el("button", {type:"button", onclick:() => { state.apiKey = ""; store.set("bw.key", ""); renderDetail(); }}, "Remove") : null));
+  }
+  function picksBlock(b){
+    const box = el("div", {class:"picks"}, el("h4", {}, "What to order"));
+    if (!state.favs.length) {
+      box.append(el("p", {class:"hint"}, "Add beers you like near the top of the page, and picks for this brewery show up here."));
+      return box;
+    }
+    const p = state.picks[b.id];
+    box.append(el("p", {class:"hint"}, "Based on: " + likes()));
+    const acts = el("div", {class:"actions"});
+    if (state.apiKey) acts.append(el("button", {type:"button", class:"btn", disabled:!!(p && p.loading), onclick:() => getPicks(b)}, p && !p.loading ? "Refresh picks" : "🍺 Get beer picks"));
+    acts.append(el("a", {class:state.apiKey ? null : "primary", href:claudeLink([b]), target:"_blank", rel:"noopener"}, state.apiKey ? "Ask Claude (checks live tap list)" : "🍺 Ask Claude for picks"));
+    box.append(acts);
+    if (p && p.loading) box.append(el("p", {class:"hint", "aria-live":"polite"}, "Matching this brewery’s beers to what you like…"));
+    else if (p && p.error) box.append(el("p", {class:"status err"}, p.error));
+    else if (p) {
+      if (!p.items.length) box.append(el("p", {class:"hint"}, "Claude doesn’t know this brewery’s beers well. Ask Claude to check the live tap list, or ask the bartender."));
+      for (const x of p.items) box.append(el("div", {class:"pick"},
+        el("p", {class:"bn"}, String(x.beer)),
+        el("p", {class:"bm"}, [x.style, x.abv, x.rating ? "≈" + x.rating + " on Untappd" : ""].filter(Boolean).join(", ")),
+        x.why ? el("p", {}, String(x.why)) : null));
+      if (p.note) box.append(el("p", {class:"hint"}, String(p.note)));
+      box.append(el("p", {class:"source"}, "From Claude’s knowledge of Untappd ratings, not live data. Tap lists rotate, so check the board."));
+    } else if (!state.apiKey) {
+      box.append(el("p", {class:"hint"}, "Opens Claude with this brewery and your likes filled in. Free Claude accounts work."));
+    }
+    box.append(keyBox());
+    return box;
   }
 
   // ---------- crawl ----------
@@ -537,6 +646,7 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
       acts.append(el("a", {class:r.firstRide ? null : "primary", href:gm, target:"_blank", rel:"noopener"}, "🚶 Walking route in Google Maps"));
     }
     acts.append(el("button", {type:"button", class:"skip", onclick:showRouteOnMap}, "Show on map"));
+    if (state.favs.length) acts.append(el("a", {href:claudeLink(s), target:"_blank", rel:"noopener"}, "🍺 Beer picks for every stop"));
     out.append(acts);
     if (state.skip.size) out.append(resetSkips());
   }
@@ -595,7 +705,7 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
     state.route = state.here && state.breweries.length ? buildCrawl() : null;
     renderMap(fit); renderLists(); renderDetail(); renderCrawl();
   }
-  bindCrawl(); renderWalkOut(); renderAll(false);
+  bindCrawl(); renderWalkOut(); renderFavs(); renderAll(false);
   // Fill the slider track up to the thumb so the value is visible at a glance.
   document.querySelectorAll('input[type=range]').forEach(r => {
     const fill = () => r.style.setProperty("--fill", ((r.value - r.min) / (r.max - r.min) * 100) + "%");
