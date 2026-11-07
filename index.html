@@ -26,7 +26,6 @@
     --amber:#E3A43C; --walk:#5DC285; --ride:#86A8EA; --walk-soft:#1F3626; --ride-soft:#1E2A40;
     color-scheme: dark;
   }
-  .leaflet-tile{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9)}
 }
 *,*::before,*::after{box-sizing:inherit}
 body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--body);-webkit-font-smoothing:antialiased}
@@ -48,7 +47,9 @@ button{cursor:pointer}
 .go:disabled{opacity:.55;cursor:progress}
 .status{color:var(--muted);font-size:15px;min-height:1.5em}
 .status.err{color:#C0392B}
-.slider label{display:flex;justify-content:space-between;gap:12px;font-weight:700;margin-bottom:6px}
+.status:empty{display:none}
+.walkinfo{font-size:14px;color:var(--muted);margin-top:2px}
+.slider label{display:flex;flex-wrap:wrap;justify-content:space-between;column-gap:12px;font-weight:700;margin-bottom:2px}
 .slider output{font-weight:400;color:var(--muted);text-align:right}
 input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:34px;margin:0;background:transparent;touch-action:pan-y;cursor:pointer}
 input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:linear-gradient(to right,var(--walk) var(--fill,50%),var(--line) var(--fill,50%))}
@@ -56,7 +57,7 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
 input[type=range]::-moz-range-track{height:8px;border-radius:999px;background:var(--line)}
 input[type=range]::-moz-range-progress{height:8px;border-radius:999px;background:var(--walk)}
 input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--walk);border:3px solid var(--surface);box-shadow:0 1px 4px rgba(0,0,0,.35)}
-@media (max-width:520px){.slider label{flex-direction:column;gap:0}.slider output{text-align:left}}
+@media (max-width:520px){#map{height:52vh}}
 .row-form{display:flex;gap:8px}
 .row-form input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .row-form button{background:transparent;border:1px solid var(--ink);border-radius:10px;padding:0 14px;font-weight:700}
@@ -121,6 +122,13 @@ input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;bac
 .leg.ride{border-left:2px dashed var(--ride)}
 .total{display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--line);padding-top:10px;margin-top:6px}
 .total strong{font:800 30px/1 var(--display)}
+.leaflet-popup-content-wrapper,.leaflet-popup-tip{background:var(--surface);color:var(--ink)}
+.pop h4{margin:0 0 2px;font:800 19px/1.1 var(--display)}
+.pop p{margin:0;color:var(--muted);font-size:13px}
+.pop .actions{margin-top:10px;gap:6px}
+.pop .actions a{font-size:13px;padding:7px 11px;color:var(--ink)}
+.pop .actions a.primary{color:var(--surface)}
+.actions .skip{font-weight:700}
 footer{margin-top:28px;color:var(--muted);font-size:13px}
 </style>
 </head>
@@ -150,6 +158,7 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
       <div class="slider">
         <label for="walk">Walk to first brewery <output id="walkOut" for="walk"></output></label>
         <input type="range" id="walk" min="0.25" max="2.5" step="0.25" value="1">
+        <p class="walkinfo" id="walkInfo" aria-live="polite"></p>
       </div>
     </div>
   </section>
@@ -243,7 +252,7 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
   const walkMin = mi => Math.max(1, Math.round(mi * 20));
   const rideMin = mi => Math.round(5 + mi * 3.2);
   const fmtMi = mi => mi < 0.1 ? "<0.1" : mi.toFixed(1);
-  const fmtD = mi => `${mi} mi, about ${walkMin(mi)} min`;
+  const fmtD = mi => `${mi} mi (${walkMin(mi)} min)`;
   const isWalk = b => b.mi <= state.walk;
   const enc = encodeURIComponent;
   function setStatus(msg, err){ const s = $("status"); s.textContent = msg || ""; s.classList.toggle("err", !!err); }
@@ -367,15 +376,35 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
     }
     const order = route ? new Map(route.map((b, i) => [b.id, i + 1])) : new Map();
     for (const b of state.breweries) {
-      L.marker([b.lat, b.lng], {icon:pinIcon(b, order.get(b.id)), title:b.name, alt:b.name, keyboard:true,
+      const mk = L.marker([b.lat, b.lng], {icon:pinIcon(b, order.get(b.id)), title:b.name, alt:b.name, keyboard:true,
         zIndexOffset:b.id === state.selected ? 1000 : order.has(b.id) ? 500 : 0})
-        .on("click", () => select(b.id, true)).addTo(layer);
+        .on("click", () => { state.selected = b.id; state.popup = true; renderAll(false); }).addTo(layer);
+      if (b.id === state.selected && state.popup) { state.popup = false; mk.bindPopup(popupFor(b), {maxWidth:260, autoPanPadding:[24, 24]}).openPopup(); }
     }
     L.marker(h, {icon:L.divIcon({className:"pinwrap", html:'<div class="you"></div>', iconSize:[18, 18], iconAnchor:[9, 9]}), title:"You", zIndexOffset:2000}).addTo(layer);
     if (fit) {
       const near = state.breweries.slice(0, 12).map(b => [b.lat, b.lng]);
       map.fitBounds(L.latLngBounds([h, ...near]).pad(0.12), {maxZoom:16});
     }
+  }
+
+  const dirLink = (b, mode) => `https://www.google.com/maps/dir/?api=1&origin=${state.here.lat},${state.here.lng}&destination=${enc((b.name + " " + b.address).trim())}&travelmode=${mode}`;
+  const smooth = () => matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
+  function popupFor(b){
+    const w = isWalk(b);
+    return el("div", {class:"pop"},
+      el("h4", {}, b.name),
+      el("p", {}, `${fmtMi(b.mi)} mi, ${w ? walkMin(b.mi) + " min walk" : "about " + rideMin(b.mi) + " min by Uber"}`),
+      el("div", {class:"actions"},
+        w ? el("a", {class:"primary", href:dirLink(b, "walking"), target:"_blank", rel:"noopener"}, "🚶 Directions")
+          : el("a", {class:"primary", href:uberLink(b), target:"_blank", rel:"noopener"}, "🚗 Uber"),
+        el("a", {href:"#detail", onclick:e => { e.preventDefault(); map.closePopup(); $("detail").scrollIntoView({behavior:smooth(), block:"start"}); }}, "More")));
+  }
+  function showRouteOnMap(){
+    const r = state.route;
+    if (!r || !r.stops.length) return;
+    map.fitBounds(L.latLngBounds([[state.here.lat, state.here.lng], ...r.stops.map(b => [b.lat, b.lng])]).pad(0.2), {maxZoom:17});
+    document.querySelector(".mapwrap").scrollIntoView({behavior:smooth(), block:"start"});
   }
 
   // ---------- lists ----------
@@ -390,6 +419,7 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
     const walk = state.breweries.filter(isWalk), ride = state.breweries.filter(b => !isWalk(b));
     $("walkCount").textContent = state.here ? walk.length : "";
     $("rideCount").textContent = state.here ? ride.length : "";
+    $("walkInfo").textContent = state.here ? `🚶 ${walk.length} walkable, 🚗 ${ride.length} by Uber` : "";
     $("walkList").replaceChildren(...(walk.length ? walk.map(row)
       : [el("li", {class:"empty"}, state.here ? "Nothing inside your walking range. Slide the walk distance up, or grab an Uber." : "Walkable breweries show up here.")]));
     $("rideList").replaceChildren(...(ride.length ? ride.map(row)
@@ -506,6 +536,7 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
       const gm = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${place(walkStops[walkStops.length - 1])}${wp ? "&waypoints=" + wp : ""}&travelmode=walking`;
       acts.append(el("a", {class:r.firstRide ? null : "primary", href:gm, target:"_blank", rel:"noopener"}, "🚶 Walking route in Google Maps"));
     }
+    acts.append(el("button", {type:"button", class:"skip", onclick:showRouteOnMap}, "Show on map"));
     out.append(acts);
     if (state.skip.size) out.append(resetSkips());
   }
