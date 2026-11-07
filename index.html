@@ -1,0 +1,565 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Brewery Walk</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍺</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@600;800&family=Public+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --bg:#EEF1EA; --surface:#FFFFFF; --ink:#1E2B23; --muted:#5B685F; --line:#CFD6CB;
+  --amber:#B06C0E; --walk:#2E7D4A; --ride:#2C56A0; --walk-soft:#DCEBDF; --ride-soft:#DDE5F3;
+  --display:"Big Shoulders Display", "Arial Narrow", sans-serif;
+  --body:"Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: light;
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#121A15; --surface:#1B251E; --ink:#E8EEE6; --muted:#9AA79D; --line:#2E3C32;
+    --amber:#E3A43C; --walk:#5DC285; --ride:#86A8EA; --walk-soft:#1F3626; --ride-soft:#1E2A40;
+    color-scheme: dark;
+  }
+  .leaflet-tile{filter:invert(1) hue-rotate(180deg) brightness(.85) contrast(.9)}
+}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.5 var(--body);-webkit-font-smoothing:antialiased}
+main{max-width:1080px;margin:0 auto;padding:20px 18px 48px}
+h1{font:800 clamp(52px,12vw,104px)/.86 var(--display);letter-spacing:-.01em;margin:8px 0 10px}
+h2{font:800 30px/1 var(--display);margin:0 0 10px}
+h3{font:600 24px/1.05 var(--display);margin:0}
+p{margin:0}
+a{color:inherit}
+.lede{color:var(--muted);max-width:52ch}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:3px solid var(--amber);outline-offset:2px}
+[hidden]{display:none !important}
+
+.top{display:grid;gap:18px;margin-bottom:22px}
+.controls{display:grid;gap:16px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px}
+.go{background:var(--ink);color:var(--bg);border:0;border-radius:999px;padding:13px 22px;font-weight:700;justify-self:start}
+.go:disabled{opacity:.55;cursor:progress}
+.status{color:var(--muted);font-size:15px;min-height:1.5em}
+.status.err{color:#C0392B}
+.slider label{display:flex;justify-content:space-between;gap:12px;font-weight:700;margin-bottom:6px}
+.slider output{font-weight:400;color:var(--muted);text-align:right}
+input[type=range]{width:100%;accent-color:var(--walk)}
+.row-form{display:flex;gap:8px}
+.row-form input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.row-form button{background:transparent;border:1px solid var(--ink);border-radius:10px;padding:0 14px;font-weight:700}
+.row-form button:disabled{opacity:.55}
+.locfix{border-left:3px solid var(--amber);padding:2px 0 2px 12px;display:grid;gap:8px}
+.locfix .steps{margin:0;padding-left:18px;font-size:14px;display:grid;gap:4px}
+.hint,.note{color:var(--muted);font-size:14px}
+
+.stage{display:grid;gap:22px}
+@media (min-width:860px){
+  .top{grid-template-columns:1.1fr 1fr;align-items:end}
+  .stage{grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);align-items:start}
+  .mapwrap{position:sticky;top:16px}
+}
+.mapwrap{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px}
+#map{height:min(68vh,540px);border-radius:10px;background:var(--bg)}
+.legend{display:flex;gap:16px;flex-wrap:wrap;font-size:14px;color:var(--muted);padding:8px 6px 2px}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.dot{width:12px;height:12px;border-radius:50%}
+.pinwrap{background:none;border:0}
+.pin{position:relative;display:grid;place-items:center;width:30px;height:30px;border-radius:50%;border:2.5px solid #fff;font-size:15px;line-height:1;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.pin.walk{background:var(--walk)} .pin.ride{background:var(--ride)}
+.pin.sel{border:4px solid var(--amber);transform:scale(1.18)}
+.pin .num{position:absolute;top:-9px;right:-9px;width:19px;height:19px;border-radius:50%;background:var(--amber);color:#fff;border:2px solid #fff;font:800 12px/15px var(--display);text-align:center}
+.you{width:18px;height:18px;border-radius:50%;background:var(--amber);border:3px solid #fff;box-shadow:0 0 0 7px rgba(176,108,14,.28)}
+
+.group{margin-bottom:22px}
+.group .count{color:var(--muted);font:400 16px var(--body);margin-left:6px}
+.list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.row{width:100%;text-align:left;display:grid;grid-template-columns:34px 1fr auto;gap:10px;align-items:center;background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px}
+.row[aria-pressed="true"]{border-color:var(--amber);box-shadow:inset 4px 0 0 var(--amber)}
+.row .ico{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-size:18px}
+.row.walk .ico{background:var(--walk-soft)} .row.ride .ico{background:var(--ride-soft)}
+.row .name{font-weight:700;line-height:1.25}
+.row .sub{color:var(--muted);font-size:14px}
+.row .dist{font:600 22px/1 var(--display);text-align:right}
+.row .dist small{display:block;font:400 12px var(--body);color:var(--muted);margin-top:3px}
+.empty{color:var(--muted);background:var(--surface);border:1px dashed var(--line);border-radius:12px;padding:14px}
+
+.detail,.crawl{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px;margin-bottom:22px}
+.crawl{display:grid;gap:14px}
+.crawl h2{margin:0}
+.detail .meta{color:var(--muted);font-size:14px;margin-top:4px}
+.detail .about{margin-top:10px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}
+.actions a{display:inline-flex;align-items:center;gap:6px;text-decoration:none;border-radius:999px;padding:9px 14px;font-weight:700;font-size:15px;border:1px solid var(--line);background:var(--bg);color:var(--ink)}
+.actions .primary{background:var(--amber);border-color:var(--amber);color:var(--surface)}
+.toggle{display:flex;gap:10px;align-items:center;font-weight:700}
+.toggle input{width:20px;height:20px;accent-color:var(--ride)}
+.startpick label{display:block;font-weight:700;margin-bottom:6px}
+.startrow button{border-color:var(--line);font-weight:400}
+.suggest{list-style:none;margin:6px 0 0;padding:4px;border:1px solid var(--line);border-radius:10px;background:var(--bg);display:grid}
+.suggest button{width:100%;text-align:left;background:none;border:0;border-radius:8px;padding:8px 10px;font-weight:700}
+.suggest button:hover,.suggest button:focus-visible{background:var(--surface)}
+.suggest small{display:block;color:var(--muted);font-size:13px;font-weight:400}
+.stops{list-style:none;margin:0;padding:0}
+.stop{display:grid;grid-template-columns:32px 1fr auto;gap:10px;align-items:center;padding:4px 0}
+.stop .n{width:32px;height:32px;border-radius:50%;background:var(--amber);color:var(--surface);display:grid;place-items:center;font:800 18px/1 var(--display)}
+.stop .sname{background:none;border:0;padding:0;text-align:left;font-weight:700;text-decoration:underline;text-decoration-color:var(--line);text-underline-offset:3px}
+.skip{border:1px solid var(--line);background:var(--bg);border-radius:999px;padding:5px 12px;font-size:13px;justify-self:start}
+.leg{margin-left:15px;border-left:2px dotted var(--walk);padding:3px 0 3px 25px;color:var(--muted);font-size:13px}
+.leg.ride{border-left:2px dashed var(--ride)}
+.total{display:flex;justify-content:space-between;align-items:baseline;border-top:1px solid var(--line);padding-top:10px;margin-top:6px}
+.total strong{font:800 30px/1 var(--display)}
+footer{margin-top:28px;color:var(--muted);font-size:13px}
+</style>
+</head>
+<body>
+<main>
+  <section class="top">
+    <div>
+      <h1>Brewery<br>Walk</h1>
+      <p class="lede">Find taprooms near where you’re standing. 🚶 means you can walk it; 🚗 means call an Uber.</p>
+    </div>
+    <div class="controls">
+      <button class="go" id="go" type="button">Find breweries near me</button>
+      <p class="status" id="status" role="status" aria-live="polite"></p>
+      <div class="locfix" id="locfix" hidden>
+        <p id="locfixMsg"></p>
+        <ul class="steps">
+          <li><strong>iPhone:</strong> Settings › Privacy &amp; Security › Location Services: turn it on, then set Safari Websites (or your browser) to While Using the App.</li>
+          <li><strong>Android:</strong> Settings › Location: turn it on, then allow location for Chrome.</li>
+          <li><strong>Any browser:</strong> tap the icon next to the web address and set Location to Allow.</li>
+        </ul>
+        <p class="hint">Then tap “Find breweries near me” again, or enter an address below.</p>
+      </div>
+      <form class="row-form" id="placeForm" autocomplete="off">
+        <input id="placeInput" placeholder="Or enter an address or city" aria-label="Address or city to search from" maxlength="200">
+        <button id="placeGo" type="submit">Search</button>
+      </form>
+      <div class="slider">
+        <label for="walk">Walk to first brewery <output id="walkOut" for="walk"></output></label>
+        <input type="range" id="walk" min="0.25" max="2.5" step="0.25" value="1">
+      </div>
+    </div>
+  </section>
+
+  <section class="stage">
+    <div class="mapwrap">
+      <div id="map" role="region" aria-label="Map of breweries around you"></div>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--amber)"></i>You</span>
+        <span><i class="dot" style="background:var(--walk)"></i>🚶 Walkable</span>
+        <span><i class="dot" style="background:var(--ride)"></i>🚗 Uber</span>
+      </div>
+    </div>
+    <div>
+      <section class="crawl" aria-labelledby="crawlH">
+        <h2 id="crawlH">Plan a crawl</h2>
+        <div class="startpick">
+          <label for="startInput">Start at a brewery</label>
+          <div class="row-form startrow">
+            <input id="startInput" placeholder="Type a brewery name, or leave blank" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="startList" aria-expanded="false" maxlength="80">
+            <button id="startClear" type="button" hidden>Clear</button>
+          </div>
+          <ul id="startList" class="suggest" role="listbox" hidden></ul>
+        </div>
+        <div class="slider">
+          <label for="stops">Stops <output id="stopsOut" for="stops"></output></label>
+          <input type="range" id="stops" min="2" max="6" step="1" value="4">
+        </div>
+        <div class="slider">
+          <label for="leg">Max walk between breweries <output id="legOut" for="leg"></output></label>
+          <input type="range" id="leg" min="0.25" max="2" step="0.25" value="0.75">
+        </div>
+        <div class="slider">
+          <label for="total">Max walk for the whole crawl <output id="totalOut" for="total"></output></label>
+          <input type="range" id="total" min="0.5" max="6" step="0.25" value="2.5">
+        </div>
+        <label class="toggle"><input type="checkbox" id="uberStart"> Take an Uber to the first stop</label>
+        <div id="crawlOut" aria-live="polite"></div>
+      </section>
+      <div id="detail"></div>
+      <div class="group">
+        <h2>Walk there<span class="count" id="walkCount"></span></h2>
+        <ul class="list" id="walkList"></ul>
+      </div>
+      <div class="group">
+        <h2>Take an Uber<span class="count" id="rideCount"></span></h2>
+        <ul class="list" id="rideList"></ul>
+      </div>
+    </div>
+  </section>
+  <footer>Brewery data from Open Brewery DB. Maps and address search from OpenStreetMap. Distances are straight-line, so real routes run a little longer.</footer>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const API = "https://api.openbrewerydb.org/v1/breweries";
+  const RADIUS = 8;
+  const KEEP = {micro:"Microbrewery", brewpub:"Brewpub", regional:"Regional brewery", large:"Large brewery", taproom:"Taproom", bar:"Beer bar", nano:"Nanobrewery", cidery:"Cidery", beergarden:"Beer garden"};
+  const store = {
+    get(k, d){ try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+    set(k, v){ try { localStorage.setItem(k, JSON.stringify(v)); } catch {} }
+  };
+  const state = {
+    here: null, breweries: [], selected: null, busy: false,
+    walk: Number(store.get("bw.walk", 1)) || 1,
+    crawl: Object.assign({stops:4, leg:0.75, total:2.5, uber:false}, store.get("bw.crawl", {})),
+    skip: new Set(), route: null, start: null, note: ""
+  };
+
+  // ---------- helpers ----------
+  function el(tag, attrs = {}, ...kids){
+    const n = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v == null || v === false) continue;
+      if (k === "class") n.className = v;
+      else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+      else n.setAttribute(k, v === true ? "" : v);
+    }
+    for (const c of kids.flat()) if (c != null) n.append(c.nodeType ? c : document.createTextNode(String(c)));
+    return n;
+  }
+  const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  function miles(a, b){
+    const R = 3958.8, r = x => x * Math.PI / 180;
+    const dLat = r(b.lat - a.lat), dLng = r(b.lng - a.lng);
+    const h = Math.sin(dLat/2)**2 + Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLng/2)**2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  const walkMin = mi => Math.max(1, Math.round(mi * 20));
+  const rideMin = mi => Math.round(5 + mi * 3.2);
+  const fmtMi = mi => mi < 0.1 ? "<0.1" : mi.toFixed(1);
+  const fmtD = mi => `${mi} mi, about ${walkMin(mi)} min`;
+  const isWalk = b => b.mi <= state.walk;
+  const enc = encodeURIComponent;
+  function setStatus(msg, err){ const s = $("status"); s.textContent = msg || ""; s.classList.toggle("err", !!err); }
+
+  // ---------- data: Open Brewery DB ----------
+  function toBrewery(r){
+    if (!KEEP[r.brewery_type] || r.latitude == null || r.longitude == null) return null;
+    const lat = +r.latitude, lng = +r.longitude;
+    if (!isFinite(lat) || !isFinite(lng) || (lat === 0 && lng === 0)) return null;
+    return {id:r.id, name:r.name, kind:KEEP[r.brewery_type], lat, lng,
+      address:[r.address_1 || r.street, r.city, r.state_province || r.state].filter(Boolean).join(", "),
+      web:r.website_url || ""};
+  }
+  async function fetchNear(pt){
+    const res = await fetch(`${API}?by_dist=${pt.lat.toFixed(5)},${pt.lng.toFixed(5)}&per_page=80`);
+    if (!res.ok) throw new Error("brewery_api");
+    return (await res.json()).map(toBrewery).filter(Boolean);
+  }
+  async function loadAround(){
+    const sets = await Promise.all([fetchNear(state.here), state.start ? fetchNear(state.start) : []]);
+    const map = new Map();
+    for (const list of sets) for (const b of list) if (!map.has(b.id)) map.set(b.id, b);
+    if (state.start) map.set(state.start.id, state.start);
+    const all = [...map.values()].map(b => ({...b, mi:miles(state.here, b)}))
+      .filter(b => b.mi <= RADIUS || (state.start && miles(state.start, b) <= RADIUS))
+      .sort((a, b) => a.mi - b.mi);
+    const out = all.slice(0, 40);
+    if (state.start && !out.some(b => b.id === state.start.id)) out.push(all.find(b => b.id === state.start.id));
+    return out;
+  }
+
+  // ---------- location ----------
+  function getPosition(){
+    return new Promise((res, rej) => {
+      if (!navigator.geolocation) return rej({code:2});
+      navigator.geolocation.getCurrentPosition(p => res({lat:p.coords.latitude, lng:p.coords.longitude}),
+        rej, {enableHighAccuracy:true, timeout:15000, maximumAge:60000});
+    });
+  }
+  function showLocFix(msg){ $("locfixMsg").textContent = msg; $("locfix").hidden = false; setStatus("We need your location to find breweries near you.", true); }
+  async function locateGPS(){
+    let perm = "unknown";
+    try { if (navigator.permissions) perm = (await navigator.permissions.query({name:"geolocation"})).state; } catch {}
+    setStatus(perm === "granted" ? "Finding your location…" : "Finding your location. Tap Allow when your phone asks.");
+    try { return await getPosition(); }
+    catch (e) {
+      if (e.code === 1) showLocFix("Location is turned off for this site, so your phone didn’t share where you are. Turn it on:");
+      else if (e.code === 3) setStatus("Getting your location took too long. Try again.", true);
+      else showLocFix("Your phone couldn’t get a location fix. Check that Location Services is on:");
+      return null;
+    }
+  }
+  function parseCoords(q){
+    const pats = [/@(-?\d+\.\d+),\s*(-?\d+\.\d+)/, /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/,
+      /[?&](?:ll|q|query|sll|daddr|destination|coordinate)=(-?\d+\.\d+)(?:,|%2C)\s*(-?\d+\.\d+)/i,
+      /^\s*(-?\d{1,2}\.\d+)\s*,\s*(-?\d{1,3}\.\d+)\s*$/];
+    for (const p of pats) { const m = q.match(p); if (m) { const lat = +m[1], lng = +m[2]; if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return {lat, lng}; } }
+    return null;
+  }
+  async function locatePlace(){
+    const q = $("placeInput").value.trim();
+    if (!q) { setStatus("Enter an address first, like 1701 Wynkoop St, Denver, CO.", true); return null; }
+    const pt = parseCoords(q);
+    if (pt) { setStatus("Searching from that map pin…"); return pt; }
+    setStatus(`Finding ${q}…`);
+    try {
+      const res = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&q=${enc(q)}`, {headers:{"Accept-Language":"en"}});
+      const d = res.ok ? await res.json() : [];
+      if (d.length) { setStatus(`Searching around ${d[0].display_name.split(",").slice(0, 3).join(",")}…`); return {lat:+d[0].lat, lng:+d[0].lon}; }
+      setStatus(`Couldn’t find “${q}”. Add the city and state, like “1701 Wynkoop St, Denver, CO”.`, true);
+    } catch { setStatus("Address search didn’t respond. Check your connection and try again.", true); }
+    return null;
+  }
+
+  $("go").addEventListener("click", () => runSearch(locateGPS));
+  $("placeForm").addEventListener("submit", e => { e.preventDefault(); runSearch(locatePlace); });
+
+  async function runSearch(locate){
+    if (state.busy) return;
+    state.busy = true; $("go").disabled = true; $("placeGo").disabled = true;
+    try {
+      const here = await locate();
+      if (!here) return;
+      $("locfix").hidden = true;
+      state.here = here; state.selected = null; state.skip = new Set();
+      setStatus("Finding breweries nearby…");
+      await refreshBreweries(true);
+    } finally {
+      state.busy = false; $("go").disabled = false; $("placeGo").disabled = false;
+    }
+  }
+  async function refreshBreweries(fit){
+    try { state.breweries = await loadAround(); }
+    catch { setStatus("The brewery list didn’t load. Check your connection and try again.", true); return; }
+    const n = state.breweries.length;
+    setStatus(n ? `${n} breweries within ${RADIUS} miles. Check hours before you go.` : `No breweries listed within ${RADIUS} miles of here.`);
+    renderAll(fit);
+  }
+
+  // ---------- map (Leaflet + OpenStreetMap) ----------
+  const map = L.map("map", {zoomControl:true, scrollWheelZoom:false}).setView([39.5, -98.35], 4);
+  L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:"© OpenStreetMap contributors"}).addTo(map);
+  const layer = L.layerGroup().addTo(map);
+  function pinIcon(b, num){
+    const cls = "pin " + (isWalk(b) ? "walk" : "ride") + (b.id === state.selected ? " sel" : "");
+    return L.divIcon({className:"pinwrap", iconSize:[30, 30], iconAnchor:[15, 15],
+      html:`<div class="${cls}">${isWalk(b) ? "🚶" : "🚗"}${num ? `<span class="num">${num}</span>` : ""}</div>`});
+  }
+  function renderMap(fit){
+    layer.clearLayers();
+    if (!state.here) return;
+    const h = [state.here.lat, state.here.lng];
+    L.circle(h, {radius:state.walk * 1609.34, color:getComputedStyle(document.documentElement).getPropertyValue("--walk").trim(), weight:2, fillOpacity:.12}).addTo(layer);
+    const route = state.route && state.route.stops.length ? state.route.stops : null;
+    if (route) {
+      const amber = getComputedStyle(document.documentElement).getPropertyValue("--amber").trim();
+      const ride = getComputedStyle(document.documentElement).getPropertyValue("--ride").trim();
+      const pts = route.map(b => [b.lat, b.lng]);
+      L.polyline([h, pts[0]], {color:state.route.firstRide ? ride : amber, weight:4, dashArray:state.route.firstRide ? "8 8" : null}).addTo(layer);
+      if (pts.length > 1) L.polyline(pts, {color:amber, weight:4}).addTo(layer);
+    }
+    const order = route ? new Map(route.map((b, i) => [b.id, i + 1])) : new Map();
+    for (const b of state.breweries) {
+      L.marker([b.lat, b.lng], {icon:pinIcon(b, order.get(b.id)), title:b.name, alt:b.name, keyboard:true,
+        zIndexOffset:b.id === state.selected ? 1000 : order.has(b.id) ? 500 : 0})
+        .on("click", () => select(b.id, true)).addTo(layer);
+    }
+    L.marker(h, {icon:L.divIcon({className:"pinwrap", html:'<div class="you"></div>', iconSize:[18, 18], iconAnchor:[9, 9]}), title:"You", zIndexOffset:2000}).addTo(layer);
+    if (fit) {
+      const near = state.breweries.slice(0, 12).map(b => [b.lat, b.lng]);
+      map.fitBounds(L.latLngBounds([h, ...near]).pad(0.12), {maxZoom:16});
+    }
+  }
+
+  // ---------- lists ----------
+  function row(b){
+    const w = isWalk(b);
+    return el("li", {}, el("button", {type:"button", class:"row " + (w ? "walk" : "ride"), "aria-pressed":String(b.id === state.selected), onclick:() => select(b.id, false)},
+      el("span", {class:"ico", "aria-hidden":"true"}, w ? "🚶" : "🚗"),
+      el("span", {}, el("span", {class:"name"}, b.name), el("br"), el("span", {class:"sub"}, [b.kind, b.address].filter(Boolean).join(", "))),
+      el("span", {class:"dist"}, `${fmtMi(b.mi)} mi`, el("small", {}, w ? `${walkMin(b.mi)} min walk` : `~${rideMin(b.mi)} min ride`))));
+  }
+  function renderLists(){
+    const walk = state.breweries.filter(isWalk), ride = state.breweries.filter(b => !isWalk(b));
+    $("walkCount").textContent = state.here ? walk.length : "";
+    $("rideCount").textContent = state.here ? ride.length : "";
+    $("walkList").replaceChildren(...(walk.length ? walk.map(row)
+      : [el("li", {class:"empty"}, state.here ? "Nothing inside your walking range. Slide the walk distance up, or grab an Uber." : "Walkable breweries show up here.")]));
+    $("rideList").replaceChildren(...(ride.length ? ride.map(row)
+      : [el("li", {class:"empty"}, state.here ? "Everything nearby is walkable." : "Breweries worth a ride show up here.")]));
+  }
+
+  // ---------- detail ----------
+  const uberLink = b => `https://m.uber.com/ul/?action=setPickup&pickup=my_location&dropoff[latitude]=${b.lat}&dropoff[longitude]=${b.lng}&dropoff[nickname]=${enc(b.name)}&dropoff[formatted_address]=${enc(b.address)}`;
+  const untappdLink = b => `https://untappd.com/search?q=${enc(b.name)}&type=brewery`;
+  function select(id, scroll){
+    state.selected = state.selected === id ? null : id;
+    renderAll(false);
+    if (scroll && state.selected) $("detail").scrollIntoView({behavior:matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block:"start"});
+  }
+  function renderDetail(){
+    const box = $("detail"); box.replaceChildren();
+    const b = state.breweries.find(x => x.id === state.selected);
+    if (!b) return;
+    const w = isWalk(b), h = state.here;
+    const gm = `https://www.google.com/maps/dir/?api=1&origin=${h.lat},${h.lng}&destination=${enc((b.name + " " + b.address).trim())}&travelmode=${w ? "walking" : "driving"}`;
+    box.append(el("div", {class:"detail"},
+      el("h3", {}, b.name),
+      el("p", {class:"meta"}, `${fmtMi(b.mi)} mi, ${w ? walkMin(b.mi) + " min walk" : "about " + rideMin(b.mi) + " min by Uber"}${b.address ? ", " + b.address : ""}`),
+      b.kind ? el("p", {class:"about"}, b.kind) : null,
+      el("div", {class:"actions"},
+        w ? el("a", {class:"primary", href:gm, target:"_blank", rel:"noopener"}, "🚶 Walking directions")
+          : el("a", {class:"primary", href:uberLink(b), target:"_blank", rel:"noopener"}, "🚗 Open in Uber"),
+        w ? el("a", {href:uberLink(b), target:"_blank", rel:"noopener"}, "🚗 Uber instead")
+          : el("a", {href:gm, target:"_blank", rel:"noopener"}, "Driving directions"),
+        el("a", {href:untappdLink(b), target:"_blank", rel:"noopener"}, "🍺 Beers on Untappd"),
+        b.web ? el("a", {href:b.web, target:"_blank", rel:"noopener"}, "Website") : null)));
+  }
+
+  // ---------- crawl ----------
+  function bindCrawl(){
+    const c = state.crawl;
+    const show = () => { $("stopsOut").textContent = c.stops; $("legOut").textContent = fmtD(c.leg); $("totalOut").textContent = fmtD(c.total); };
+    ["stops", "leg", "total"].forEach(k => {
+      $(k).value = c[k];
+      $(k).addEventListener("input", e => { c[k] = Number(e.target.value); store.set("bw.crawl", c); show(); schedule(); });
+    });
+    $("uberStart").checked = !!c.uber;
+    $("uberStart").addEventListener("change", e => { c.uber = e.target.checked; store.set("bw.crawl", c); renderAll(false); });
+    show();
+  }
+  let frame = 0;
+  function schedule(){ cancelAnimationFrame(frame); frame = requestAnimationFrame(() => renderAll(false)); }
+
+  // Best crawl: most stops (up to the target), then least walking.
+  function buildCrawl(){
+    const c = state.crawl, pool = state.breweries.filter(b => !state.skip.has(b.id)).slice(0, 25);
+    let best = {stops:[], walk:0, ride:0}, steps = 0;
+    const used = new Set(), path = [], score = (w, r) => w + r * 0.05;
+    const start = state.start ? state.breweries.find(b => b.id === state.start.id) : null;
+    function dfs(cur, walk, ride){
+      if (++steps > 300000) return;
+      if (path.length && (path.length > best.stops.length || (path.length === best.stops.length && score(walk, ride) < score(best.walk, best.ride))))
+        best = {stops:[...path], walk, ride};
+      if (path.length >= c.stops) return;
+      for (const b of pool) {
+        if (used.has(b.id)) continue;
+        let w = walk, r = ride;
+        if (!cur) { if (c.uber) r = b.mi; else { if (b.mi > state.walk) continue; w += b.mi; } }
+        else { const d = miles(cur, b); if (d > c.leg) continue; w += d; }
+        if (w > c.total) continue;
+        used.add(b.id); path.push(b); dfs(b, w, r); path.pop(); used.delete(b.id);
+      }
+    }
+    if (start) {
+      const fr = c.uber || start.mi > state.walk;
+      used.add(start.id); path.push(start);
+      dfs(start, fr ? 0 : start.mi, fr ? start.mi : 0);
+      best.firstRide = fr;
+    } else { dfs(null, 0, 0); best.firstRide = c.uber; }
+    return best;
+  }
+  function resetSkips(){
+    return el("button", {type:"button", class:"skip", onclick:() => { state.skip.clear(); renderAll(false); }}, `Bring back ${state.skip.size} skipped`);
+  }
+  function renderCrawl(){
+    const out = $("crawlOut"); out.replaceChildren();
+    const c = state.crawl, r = state.route;
+    if (!state.here) { out.append(el("p", {class:"note"}, "Find breweries first, and your crawl builds here.")); return; }
+    if (!state.breweries.length) { out.append(el("p", {class:"note"}, "No breweries to build a crawl from.")); return; }
+    if (!r || !r.stops.length) {
+      out.append(el("p", {class:"note"}, c.uber ? "No stops fit these limits. Raise the walk limits or bring back skipped breweries."
+        : `Nothing is within ${state.walk} mi to start. Raise “Walk to first brewery” or take an Uber to the first stop.`));
+      if (state.skip.size) out.append(resetSkips());
+      return;
+    }
+    const s = r.stops, list = el("ol", {class:"stops"});
+    let prev = null;
+    s.forEach((b, i) => {
+      const d = prev ? miles(prev, b) : b.mi, ride = !prev && r.firstRide;
+      list.append(el("li", {class:"leg" + (ride ? " ride" : "")}, ride ? `🚗 ${fmtMi(d)} mi by Uber, about ${rideMin(d)} min` : `🚶 ${fmtMi(d)} mi, ${walkMin(d)} min walk`));
+      list.append(el("li", {class:"stop"},
+        el("span", {class:"n", "aria-hidden":"true"}, i + 1),
+        el("button", {type:"button", class:"sname", onclick:() => select(b.id, true)}, b.name),
+        el("button", {type:"button", class:"skip", "aria-label":`Skip ${b.name}`,
+          onclick:() => { if (state.start && b.id === state.start.id) clearStart(); else { state.skip.add(b.id); renderAll(false); } }}, "Skip")));
+      prev = b;
+    });
+    out.append(list);
+    if (s.length < c.stops) out.append(el("p", {class:"note"}, `Only ${s.length} of ${c.stops} stops fit your walking limits. Loosen a slider to add more.`));
+    out.append(el("div", {class:"total"}, el("span", {}, "Total walking"), el("strong", {}, `${fmtMi(r.walk)} mi`)),
+      el("p", {class:"note"}, `About ${walkMin(r.walk)} min on foot, within your ${c.total} mi limit.`));
+    const place = b => enc(`${b.name} ${b.address}`.trim());
+    const walkStops = r.firstRide ? s.slice(1) : s;
+    const origin = r.firstRide ? place(s[0]) : `${state.here.lat},${state.here.lng}`;
+    const acts = el("div", {class:"actions"});
+    if (r.firstRide) acts.append(el("a", {class:"primary", href:uberLink(s[0]), target:"_blank", rel:"noopener"}, "🚗 Uber to stop 1"));
+    if (walkStops.length) {
+      const wp = walkStops.slice(0, -1).map(place).join("%7C");
+      const gm = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${place(walkStops[walkStops.length - 1])}${wp ? "&waypoints=" + wp : ""}&travelmode=walking`;
+      acts.append(el("a", {class:r.firstRide ? null : "primary", href:gm, target:"_blank", rel:"noopener"}, "🚶 Walking route in Google Maps"));
+    }
+    out.append(acts);
+    if (state.skip.size) out.append(resetSkips());
+  }
+
+  // ---------- choose a starting brewery ----------
+  let searchTimer = 0, searchCtl = null;
+  $("startInput").addEventListener("input", () => {
+    clearTimeout(searchTimer);
+    const q = $("startInput").value.trim();
+    if (q.length < 2) { $("startList").hidden = true; return; }
+    searchTimer = setTimeout(async () => {
+      searchCtl?.abort(); searchCtl = new AbortController();
+      try {
+        const res = await fetch(`${API}/search?query=${enc(q)}&per_page=25`, {signal:searchCtl.signal});
+        let hits = res.ok ? (await res.json()).map(toBrewery).filter(Boolean) : [];
+        if (state.here) hits = hits.map(b => ({...b, d:miles(state.here, b)})).sort((a, b) => a.d - b.d);
+        renderSuggest(hits.slice(0, 8));
+      } catch (e) { if (e.name !== "AbortError") renderSuggest([]); }
+    }, 350);
+  });
+  function renderSuggest(hits){
+    const list = $("startList");
+    list.replaceChildren(...hits.map(b => el("li", {role:"option"}, el("button", {type:"button", onclick:() => chooseStart(b)}, b.name,
+      el("small", {}, b.address + (b.d != null ? `, ${fmtMi(b.d)} mi away` : ""))))));
+    list.hidden = !hits.length;
+    $("startInput").setAttribute("aria-expanded", String(!!hits.length));
+  }
+  $("startInput").addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); const f = $("startList").querySelector("button"); if (f) f.click(); }
+    else if (e.key === "Escape") $("startList").hidden = true;
+  });
+  async function chooseStart(b){
+    const {d, ...clean} = b;
+    state.start = clean;
+    $("startInput").value = b.name; $("startClear").hidden = false; $("startList").hidden = true;
+    $("startInput").setAttribute("aria-expanded", "false");
+    const fresh = !state.here;
+    if (fresh) state.here = {lat:b.lat, lng:b.lng};
+    state.skip.delete(b.id);
+    setStatus(fresh ? `Starting at ${b.name}. Finding breweries around it…` : `Your crawl starts at ${b.name}.`);
+    await refreshBreweries(fresh);
+  }
+  async function clearStart(){
+    state.start = null;
+    $("startInput").value = ""; $("startClear").hidden = true; $("startList").hidden = true;
+    if (state.here) await refreshBreweries(false); else renderAll(false);
+  }
+  $("startClear").addEventListener("click", clearStart);
+
+  // ---------- walk slider + render ----------
+  function renderWalkOut(){ $("walkOut").textContent = fmtD(state.walk); }
+  $("walk").value = state.walk;
+  $("walk").addEventListener("input", e => { state.walk = Number(e.target.value); store.set("bw.walk", state.walk); renderWalkOut(); schedule(); });
+
+  function renderAll(fit){
+    state.route = state.here && state.breweries.length ? buildCrawl() : null;
+    renderMap(fit); renderLists(); renderDetail(); renderCrawl();
+  }
+  bindCrawl(); renderWalkOut(); renderAll(false);
+})();
+</script>
+</body>
+</html>
