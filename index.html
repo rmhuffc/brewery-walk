@@ -50,7 +50,13 @@ button{cursor:pointer}
 .status.err{color:#C0392B}
 .slider label{display:flex;justify-content:space-between;gap:12px;font-weight:700;margin-bottom:6px}
 .slider output{font-weight:400;color:var(--muted);text-align:right}
-input[type=range]{width:100%;accent-color:var(--walk)}
+input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:34px;margin:0;background:transparent;touch-action:pan-y;cursor:pointer}
+input[type=range]::-webkit-slider-runnable-track{height:8px;border-radius:999px;background:linear-gradient(to right,var(--walk) var(--fill,50%),var(--line) var(--fill,50%))}
+input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:28px;height:28px;margin-top:-10px;border-radius:50%;background:var(--walk);border:3px solid var(--surface);box-shadow:0 1px 4px rgba(0,0,0,.35)}
+input[type=range]::-moz-range-track{height:8px;border-radius:999px;background:var(--line)}
+input[type=range]::-moz-range-progress{height:8px;border-radius:999px;background:var(--walk)}
+input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--walk);border:3px solid var(--surface);box-shadow:0 1px 4px rgba(0,0,0,.35)}
+@media (max-width:520px){.slider label{flex-direction:column;gap:0}.slider output{text-align:left}}
 .row-form{display:flex;gap:8px}
 .row-form input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .row-form button{background:transparent;border:1px solid var(--ink);border-radius:10px;padding:0 14px;font-weight:700}
@@ -559,6 +565,11 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
     renderMap(fit); renderLists(); renderDetail(); renderCrawl();
   }
   bindCrawl(); renderWalkOut(); renderAll(false);
+  // Fill the slider track up to the thumb so the value is visible at a glance.
+  document.querySelectorAll('input[type=range]').forEach(r => {
+    const fill = () => r.style.setProperty("--fill", ((r.value - r.min) / (r.max - r.min) * 100) + "%");
+    fill(); r.addEventListener("input", fill);
+  });
 })();
 </script>
 </body>
