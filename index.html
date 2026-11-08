@@ -348,7 +348,7 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
     let data = null;
     for (const url of OVERPASS) {
       try {
-        const res = await fetch(url, {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:"data=" + enc(q)});
+        const res = await opFetch(url, q);
         if (res.ok) { data = await res.json(); break; }
       } catch {}
     }
@@ -427,6 +427,12 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
   const DIVE_RADIUS = 3;
   const curRadius = () => state.mode === "dive" ? DIVE_RADIUS : RADIUS;
   const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
+  // Overpass can be slow or unreachable; never wait more than 15 seconds per server.
+  function opFetch(url, q){
+    const ctl = new AbortController(), timer = setTimeout(() => ctl.abort(), 15000);
+    return fetch(url, {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:"data=" + enc(q), signal:ctl.signal})
+      .finally(() => clearTimeout(timer));
+  }
   function osmImage(t){
     if (/^https?:\/\//.test(t.image || "")) return t.image;
     const f = t.wikimedia_commons || "";
@@ -447,7 +453,7 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
     const q = '[out:json][timeout:25];nwr["amenity"~"^(bar|pub)$"]["name"](around:' + Math.round(DIVE_RADIUS * 1609.34) + "," + pt.lat.toFixed(5) + "," + pt.lng.toFixed(5) + ");out center tags 400;";
     for (const url of OVERPASS) {
       try {
-        const res = await fetch(url, {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:"data=" + enc(q)});
+        const res = await opFetch(url, q);
         if (!res.ok) continue;
         return ((await res.json()).elements || []).map(toBar).filter(Boolean);
       } catch {}
