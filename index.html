@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Brewery Walk</title>
+<title>Brewery and Dive Bar Walk</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🍺</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -172,7 +172,7 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
 <main>
   <section class="top">
     <div>
-      <h1 id="title">Brewery<br>Walk</h1>
+      <h1 id="title">Brewery and<br>Dive Bar Walk</h1>
       <p class="lede" id="lede">Find taprooms near where you’re standing. 🚶 means you can walk it; 🚗 means call an Uber.</p>
     </div>
     <div class="controls">
@@ -812,13 +812,11 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
     const dive = state.mode === "dive";
     $("modeBrew").setAttribute("aria-checked", String(!dive));
     $("modeDive").setAttribute("aria-checked", String(dive));
-    $("title").innerHTML = dive ? "Dive Bar<br>Walk" : "Brewery<br>Walk";
     $("lede").textContent = dive ? "Find old-school dives near you. 🚶 means you can walk it; 🚗 means call an Uber." : "Find taprooms near where you’re standing. 🚶 means you can walk it; 🚗 means call an Uber.";
     $("go").textContent = dive ? "Find dive bars near me" : "Find breweries near me";
     $("startLabel").textContent = dive ? "Start at a bar" : "Start at a brewery";
     $("startInput").placeholder = dive ? "Type a bar name, or leave blank" : "Type a brewery name, or leave blank";
     document.querySelector(".favs").hidden = dive;
-    document.title = dive ? "Dive Bar Walk" : "Brewery Walk";
   }
   async function setMode(m){
     if (state.mode === m || state.busy) return;
