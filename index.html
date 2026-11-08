@@ -12,7 +12,7 @@
 <style>
 :root{
   --bg:#EEF1EA; --surface:#FFFFFF; --ink:#1E2B23; --muted:#5B685F; --line:#CFD6CB;
-  --amber:#B06C0E; --walk:#2E7D4A; --ride:#2C56A0; --walk-soft:#DCEBDF; --ride-soft:#DDE5F3;
+  --amber:#B06C0E; --walk:#2E7D4A; --ride:#2C56A0; --walk-soft:#DCEBDF; --ride-soft:#DDE5F3; --err:#B3261E; --rail:#7B3FA8; --rail-soft:#ECE0F5;
   --display:"Big Shoulders Display", "Arial Narrow", sans-serif;
   --body:"Public Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   color-scheme: light;
@@ -23,7 +23,7 @@
 @media (prefers-color-scheme: dark){
   :root{
     --bg:#121A15; --surface:#1B251E; --ink:#E8EEE6; --muted:#9AA79D; --line:#2E3C32;
-    --amber:#E3A43C; --walk:#5DC285; --ride:#86A8EA; --walk-soft:#1F3626; --ride-soft:#1E2A40;
+    --amber:#E3A43C; --walk:#5DC285; --ride:#86A8EA; --walk-soft:#1F3626; --ride-soft:#1E2A40; --err:#FF9B8F; --rail:#C59BEA; --rail-soft:#2E2340;
     color-scheme: dark;
   }
 }
@@ -46,7 +46,7 @@ button{cursor:pointer}
 .go{background:var(--ink);color:var(--bg);border:0;border-radius:999px;padding:13px 22px;font-weight:700;justify-self:start}
 .go:disabled{opacity:.55;cursor:progress}
 .status{color:var(--muted);font-size:15px;min-height:1.5em}
-.status.err{color:#C0392B}
+.status.err{color:var(--err)}
 .status:empty{display:none}
 .walkinfo{font-size:14px;color:var(--muted);margin-top:2px}
 .slider label{display:flex;flex-wrap:wrap;justify-content:space-between;column-gap:12px;font-weight:700;margin-bottom:2px}
@@ -57,7 +57,11 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
 input[type=range]::-moz-range-track{height:8px;border-radius:999px;background:var(--line)}
 input[type=range]::-moz-range-progress{height:8px;border-radius:999px;background:var(--walk)}
 input[type=range]::-moz-range-thumb{width:22px;height:22px;border-radius:50%;background:var(--walk);border:3px solid var(--surface);box-shadow:0 1px 4px rgba(0,0,0,.35)}
-@media (max-width:520px){#map{height:52vh}}
+@media (max-width:520px){
+  #map{height:52vh}
+  .actions{gap:6px}
+  .actions a,.actions button.btn{font-size:14px;padding:8px 12px}
+}
 .row-form{display:flex;gap:8px}
 .row-form input{flex:1;min-width:0;background:var(--bg);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
 .row-form button{background:transparent;border:1px solid var(--ink);border-radius:10px;padding:0 14px;font-weight:700}
@@ -146,6 +150,21 @@ details.keybox summary{cursor:pointer;padding:4px 0}
 details.keybox p{margin:6px 0}
 .actions button.btn{display:inline-flex;align-items:center;gap:6px;border-radius:999px;padding:9px 14px;font-weight:700;font-size:15px;border:1px solid var(--amber);background:var(--amber);color:var(--surface)}
 .actions button.btn:disabled{opacity:.55}
+.modes{display:flex;gap:4px;background:var(--bg);border:1px solid var(--line);border-radius:999px;padding:4px;justify-self:start}
+.modes button{border:0;background:transparent;border-radius:999px;padding:8px 14px;font-weight:700;color:var(--muted)}
+.modes button[aria-checked="true"]{background:var(--ink);color:var(--bg)}
+.checks{display:grid;gap:10px}
+.check{display:flex;gap:10px;align-items:flex-start;cursor:pointer}
+.check input{width:22px;height:22px;margin:1px 0 0;accent-color:var(--amber);flex:none}
+.check small{color:var(--muted)}
+.divephoto{width:100%;max-height:240px;object-fit:cover;border-radius:10px;display:block}
+.pin.cert{outline:3px solid var(--amber);outline-offset:2px}
+#diveFind{margin-top:0}
+.pin.rail{background:var(--rail)}
+.row.rail .ico{background:var(--rail-soft)}
+.leg.rail{border-left:2px dashed var(--rail)}
+.leg a{color:var(--ink);font-weight:700;margin-left:4px}
+.railtoggle{font-weight:500;font-size:15px;margin-top:6px}
 footer{margin-top:28px;color:var(--muted);font-size:13px}
 </style>
 </head>
@@ -153,10 +172,14 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
 <main>
   <section class="top">
     <div>
-      <h1>Brewery<br>Walk</h1>
-      <p class="lede">Find taprooms near where you’re standing. 🚶 means you can walk it; 🚗 means call an Uber.</p>
+      <h1 id="title">Brewery<br>Walk</h1>
+      <p class="lede" id="lede">Find taprooms near where you’re standing. 🚶 means you can walk it; 🚗 means call an Uber.</p>
     </div>
     <div class="controls">
+      <div class="modes" role="radiogroup" aria-label="What to find">
+        <button type="button" role="radio" id="modeBrew" aria-checked="true">🍺 Breweries</button>
+        <button type="button" role="radio" id="modeDive" aria-checked="false">🎱 Dive bars</button>
+      </div>
       <button class="go" id="go" type="button">Find breweries near me</button>
       <p class="status" id="status" role="status" aria-live="polite"></p>
       <div class="locfix" id="locfix" hidden>
@@ -176,7 +199,9 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
         <label for="walk">Walk to first brewery <output id="walkOut" for="walk"></output></label>
         <input type="range" id="walk" min="0.25" max="2.5" step="0.25" value="1">
         <p class="walkinfo" id="walkInfo" aria-live="polite"></p>
+        <label class="toggle railtoggle"><input type="checkbox" id="railOn"> 🚆 Use rail when it’s too far to walk</label>
       </div>
+      <div class="actions" id="diveFind" hidden></div>
       <div class="favs">
         <label for="favInput">Beers you like</label>
         <form class="row-form" id="favForm" autocomplete="off">
@@ -195,6 +220,7 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
       <div class="legend">
         <span><i class="dot" style="background:var(--amber)"></i>You</span>
         <span><i class="dot" style="background:var(--walk)"></i>🚶 Walkable</span>
+        <span><i class="dot" style="background:var(--rail)"></i>🚆 Rail</span>
         <span><i class="dot" style="background:var(--ride)"></i>🚗 Uber</span>
       </div>
     </div>
@@ -202,7 +228,7 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
       <section class="crawl" aria-labelledby="crawlH">
         <h2 id="crawlH">Plan a crawl</h2>
         <div class="startpick">
-          <label for="startInput">Start at a brewery</label>
+          <label for="startInput" id="startLabel">Start at a brewery</label>
           <div class="row-form startrow">
             <input id="startInput" placeholder="Type a brewery name, or leave blank" autocomplete="off" role="combobox" aria-autocomplete="list" aria-controls="startList" aria-expanded="false" maxlength="80">
             <button id="startClear" type="button" hidden>Clear</button>
@@ -229,6 +255,10 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
         <h2>Walk there<span class="count" id="walkCount"></span></h2>
         <ul class="list" id="walkList"></ul>
       </div>
+      <div class="group" id="railGroup" hidden>
+        <h2>Take the train<span class="count" id="railCount"></span></h2>
+        <ul class="list" id="railList"></ul>
+      </div>
       <div class="group">
         <h2>Take an Uber<span class="count" id="rideCount"></span></h2>
         <ul class="list" id="rideList"></ul>
@@ -254,7 +284,9 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
     walk: Number(store.get("bw.walk", 1)) || 1,
     crawl: Object.assign({stops:4, leg:0.75, total:2.5, uber:false}, store.get("bw.crawl", {})),
     skip: new Set(), route: null, start: null, note: "",
-    favs: store.get("bw.favs", []), picks: {}, apiKey: store.get("bw.key", "")
+    favs: store.get("bw.favs", []), picks: {}, apiKey: store.get("bw.key", ""),
+    mode: store.get("bw.mode", "brew") === "dive" ? "dive" : "brew", dive: store.get("bw.dive", {}) || {},
+    railOn: store.get("bw.rail", true) !== false, rail: null
   };
 
   // ---------- helpers ----------
@@ -281,6 +313,8 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
   const fmtMi = mi => mi < 0.1 ? "<0.1" : mi.toFixed(1);
   const fmtD = mi => `${mi} mi (${walkMin(mi)} min)`;
   const isWalk = b => b.mi <= state.walk;
+  const travel = b => b.mi <= state.walk ? "walk" : (state.railOn && railPlan(state.here, b, state.walk) ? "rail" : "ride");
+  const ICON = {walk:"🚶", rail:"🚆", ride:"🚗"};
   const enc = encodeURIComponent;
   function setStatus(msg, err){ const s = $("status"); s.textContent = msg || ""; s.classList.toggle("err", !!err); }
 
@@ -298,13 +332,136 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
     if (!res.ok) throw new Error("brewery_api");
     return (await res.json()).map(toBrewery).filter(Boolean);
   }
+  // ---------- rail: stations and lines from OpenStreetMap via Overpass ----------
+  const railCache = new Map();
+  let railReq = 0;
+  const railKey = s => String(s || "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+  async function fetchRail(pt){
+    const at = "(around:" + Math.round((curRadius() + 1.5) * 1609.34) + "," + pt.lat.toFixed(5) + "," + pt.lng.toFixed(5) + ")";
+    const q = "[out:json][timeout:40];(" +
+      'node["railway"~"^(station|halt|stop|tram_stop)$"]' + at + ";" +
+      'node["public_transport"="stop_position"]["light_rail"="yes"]' + at + ";" +
+      'node["public_transport"="stop_position"]["subway"="yes"]' + at + ";" +
+      'node["public_transport"="stop_position"]["train"="yes"]' + at + ";" +
+      'node["public_transport"="stop_position"]["tram"="yes"]' + at + ";" +
+      ');out body;rel(bn)["route"~"^(train|light_rail|subway|tram|monorail)$"];out body;';
+    let data = null;
+    for (const url of OVERPASS) {
+      try {
+        const res = await fetch(url, {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:"data=" + enc(q)});
+        if (res.ok) { data = await res.json(); break; }
+      } catch {}
+    }
+    if (!data) return {groups:[], failed:true};
+    const nodes = new Map(), nodeLines = new Map();
+    for (const e of data.elements || []) if (e.type === "node") nodes.set(e.id, e);
+    for (const e of data.elements || []) {
+      if (e.type !== "relation") continue;
+      const t = e.tags || {};
+      const nm = t.ref ? (/line|train|streetcar/i.test(t.ref) ? t.ref : t.ref + " Line") : String(t.name || "Rail line").slice(0, 32);
+      for (const m of e.members || []) if (m.type === "node" && nodes.has(m.ref)) {
+        if (!nodeLines.has(m.ref)) nodeLines.set(m.ref, new Set());
+        nodeLines.get(m.ref).add(nm);
+      }
+    }
+    const groups = [];
+    for (const n of nodes.values()) {
+      const name = n.tags && n.tags.name;
+      if (!name) continue;
+      const k = railKey(name);
+      let g = groups.find(x => x.k === k && miles(x, {lat:n.lat, lng:n.lon}) < 0.3);
+      if (!g) { g = {k, name, lat:n.lat, lng:n.lon, lines:new Set()}; groups.push(g); }
+      const nl = nodeLines.get(n.id);
+      if (nl) nl.forEach(l => g.lines.add(l));
+    }
+    return {groups:groups.filter(g => g.lines.size), failed:false};
+  }
+  function loadRail(){
+    const id = ++railReq;
+    state.rail = null; railCache.clear();
+    if (!state.railOn || !state.here) return;
+    fetchRail(state.here).then(r => { if (id !== railReq) return; state.rail = r; railCache.clear(); renderAll(false); });
+  }
+  // Best way to ride between a and b with at most one transfer, walking at most W to/from stations.
+  function railPlan(a, b, W){
+    const R = state.rail;
+    if (!R || !R.groups.length || !a || !b) return null;
+    const ck = (a.id || a.lat + "," + a.lng) + "|" + b.id + "|" + W;
+    if (railCache.has(ck)) return railCache.get(ck);
+    const near = p => R.groups.map(g => ({g, d:miles(p, g)})).filter(x => x.d <= W).sort((x, y) => x.d - y.d).slice(0, 6);
+    const O = near(a), D = near(b);
+    let best = null;
+    const score = p => p.walk + (p.transfer ? 0.5 : 0);
+    for (const o of O) for (const d of D) {
+      if (o.g === d.g) continue;
+      let plan = null;
+      for (const l of o.g.lines) if (d.g.lines.has(l)) { plan = {line:l, transfer:false}; break; }
+      if (!plan) {
+        for (const x of R.groups) {
+          if (x === o.g || x === d.g) continue;
+          let l1 = null, l2 = null;
+          for (const l of o.g.lines) if (x.lines.has(l)) { l1 = l; break; }
+          if (!l1) continue;
+          for (const l of d.g.lines) if (x.lines.has(l)) { l2 = l; break; }
+          if (l2 && l2 !== l1) { plan = {line:l1, line2:l2, via:x, transfer:true}; break; }
+        }
+      }
+      if (!plan) continue;
+      Object.assign(plan, {from:o.g, to:d.g, a1:o.d, b1:d.d, walk:o.d + d.d});
+      if (!best || score(plan) < score(best)) best = plan;
+    }
+    if (best && best.walk >= miles(a, b) * 0.8) best = null;
+    railCache.set(ck, best);
+    return best;
+  }
+  function railText(p){
+    return "🚶 " + fmtMi(p.a1) + " mi to " + p.from.name + ", 🚆 " + p.line +
+      (p.transfer ? " (change at " + p.via.name + " to the " + p.line2 + ")" : "") +
+      " to " + p.to.name + ", 🚶 " + fmtMi(p.b1) + " mi";
+  }
+  const transitLink = (a, b) => "https://www.google.com/maps/dir/?api=1&origin=" +
+    (a.name ? enc((a.name + " " + (a.address || "")).trim()) : a.lat + "," + a.lng) +
+    "&destination=" + enc((b.name + " " + b.address).trim()) + "&travelmode=transit";
+
+  // ---------- dive bars: OpenStreetMap via Overpass ----------
+  const DIVE_RADIUS = 3;
+  const curRadius = () => state.mode === "dive" ? DIVE_RADIUS : RADIUS;
+  const OVERPASS = ["https://overpass-api.de/api/interpreter", "https://maps.mail.ru/osm/tools/overpass/api/interpreter"];
+  function osmImage(t){
+    if (/^https?:\/\//.test(t.image || "")) return t.image;
+    const f = t.wikimedia_commons || "";
+    if (/^File:/i.test(f)) return "https://commons.wikimedia.org/wiki/Special:FilePath/" + enc(f.slice(5)) + "?width=640";
+    return "";
+  }
+  function toBar(e){
+    const t = e.tags || {};
+    if (!t.name || t.brand || t["brand:wikidata"]) return null;
+    const lat = e.lat != null ? e.lat : e.center && e.center.lat, lng = e.lon != null ? e.lon : e.center && e.center.lon;
+    if (lat == null || lng == null) return null;
+    const yr = parseInt(String(t.start_date || "").slice(0, 4), 10);
+    return {id:"osm-" + e.type + e.id, name:t.name, kind:t.amenity === "pub" ? "Pub" : "Bar", lat, lng,
+      address:[[t["addr:housenumber"], t["addr:street"]].filter(Boolean).join(" "), t["addr:city"]].filter(Boolean).join(", "),
+      web:t.website || t["contact:website"] || "", year:yr > 1700 && yr < 2100 ? yr : null, img:osmImage(t)};
+  }
+  async function fetchBars(pt){
+    const q = '[out:json][timeout:25];nwr["amenity"~"^(bar|pub)$"]["name"](around:' + Math.round(DIVE_RADIUS * 1609.34) + "," + pt.lat.toFixed(5) + "," + pt.lng.toFixed(5) + ");out center tags 400;";
+    for (const url of OVERPASS) {
+      try {
+        const res = await fetch(url, {method:"POST", headers:{"Content-Type":"application/x-www-form-urlencoded"}, body:"data=" + enc(q)});
+        if (!res.ok) continue;
+        return ((await res.json()).elements || []).map(toBar).filter(Boolean);
+      } catch {}
+    }
+    throw new Error("bar_api");
+  }
+  const fetchPlaces = pt => state.mode === "dive" ? fetchBars(pt) : fetchNear(pt);
   async function loadAround(){
-    const sets = await Promise.all([fetchNear(state.here), state.start ? fetchNear(state.start) : []]);
+    const sets = await Promise.all([fetchPlaces(state.here), state.start ? fetchPlaces(state.start) : []]);
     const map = new Map();
     for (const list of sets) for (const b of list) if (!map.has(b.id)) map.set(b.id, b);
     if (state.start) map.set(state.start.id, state.start);
     const all = [...map.values()].map(b => ({...b, mi:miles(state.here, b)}))
-      .filter(b => b.mi <= RADIUS || (state.start && miles(state.start, b) <= RADIUS))
+      .filter(b => b.mi <= curRadius() || (state.start && miles(state.start, b) <= curRadius()))
       .sort((a, b) => a.mi - b.mi);
     const out = all.slice(0, 40);
     if (state.start && !out.some(b => b.id === state.start.id)) out.push(all.find(b => b.id === state.start.id));
@@ -373,8 +530,14 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
   }
   async function refreshBreweries(fit){
     try { state.breweries = await loadAround(); }
-    catch { setStatus("The brewery list didn’t load. Check your connection and try again.", true); return; }
+    catch { setStatus(state.mode === "dive" ? "The bar list didn’t load. The map data service may be busy, so try again in a minute." : "The brewery list didn’t load. Check your connection and try again.", true); return; }
+    loadRail();
     const n = state.breweries.length;
+    if (state.mode === "dive") {
+      setStatus(n ? n + " bars within " + DIVE_RADIUS + " miles. Tap one to run the dive check." : "No bars listed within " + DIVE_RADIUS + " miles of here.");
+      renderAll(fit);
+      return;
+    }
     setStatus(n ? `${n} breweries within ${RADIUS} miles. Check hours before you go.` : `No breweries listed within ${RADIUS} miles of here.`);
     renderAll(fit);
   }
@@ -384,9 +547,10 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
   L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:"© OpenStreetMap contributors"}).addTo(map);
   const layer = L.layerGroup().addTo(map);
   function pinIcon(b, num){
-    const cls = "pin " + (isWalk(b) ? "walk" : "ride") + (b.id === state.selected ? " sel" : "");
+    const t = travel(b);
+    const cls = "pin " + t + (b.id === state.selected ? " sel" : "") + (state.mode === "dive" && isCertified(b) ? " cert" : "");
     return L.divIcon({className:"pinwrap", iconSize:[30, 30], iconAnchor:[15, 15],
-      html:`<div class="${cls}">${isWalk(b) ? "🚶" : "🚗"}${num ? `<span class="num">${num}</span>` : ""}</div>`});
+      html:'<div class="' + cls + '">' + ICON[t] + (num ? '<span class="num">' + num + "</span>" : "") + "</div>"});
   }
   function renderMap(fit){
     layer.clearLayers();
@@ -398,8 +562,12 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
       const amber = getComputedStyle(document.documentElement).getPropertyValue("--amber").trim();
       const ride = getComputedStyle(document.documentElement).getPropertyValue("--ride").trim();
       const pts = route.map(b => [b.lat, b.lng]);
-      L.polyline([h, pts[0]], {color:state.route.firstRide ? ride : amber, weight:4, dashArray:state.route.firstRide ? "8 8" : null}).addTo(layer);
-      if (pts.length > 1) L.polyline(pts, {color:amber, weight:4}).addTo(layer);
+      const rail = getComputedStyle(document.documentElement).getPropertyValue("--rail").trim();
+      const legs = state.route.legs || [];
+      [h].concat(pts).slice(0, -1).forEach((p, i) => {
+        const k = legs[i] || "walk";
+        L.polyline([p, pts[i]], {color:k === "ride" ? ride : k === "rail" ? rail : amber, weight:4, dashArray:k === "walk" ? null : "8 8"}).addTo(layer);
+      });
     }
     const order = route ? new Map(route.map((b, i) => [b.id, i + 1])) : new Map();
     for (const b of state.breweries) {
@@ -418,14 +586,15 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
   const dirLink = (b, mode) => `https://www.google.com/maps/dir/?api=1&origin=${state.here.lat},${state.here.lng}&destination=${enc((b.name + " " + b.address).trim())}&travelmode=${mode}`;
   const smooth = () => matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth";
   function popupFor(b){
-    const w = isWalk(b);
+    const t = travel(b), p = t === "rail" ? railPlan(state.here, b, state.walk) : null;
     return el("div", {class:"pop"},
       el("h4", {}, b.name),
-      el("p", {}, `${fmtMi(b.mi)} mi, ${w ? walkMin(b.mi) + " min walk" : "about " + rideMin(b.mi) + " min by Uber"}`),
+      el("p", {}, fmtMi(b.mi) + " mi, " + (t === "walk" ? walkMin(b.mi) + " min walk" : p ? railText(p) : "about " + rideMin(b.mi) + " min by Uber")),
       el("div", {class:"actions"},
-        w ? el("a", {class:"primary", href:dirLink(b, "walking"), target:"_blank", rel:"noopener"}, "🚶 Directions")
+        t === "walk" ? el("a", {class:"primary", href:dirLink(b, "walking"), target:"_blank", rel:"noopener"}, "🚶 Directions")
+          : t === "rail" ? el("a", {class:"primary", href:transitLink(state.here, b), target:"_blank", rel:"noopener"}, "🚆 Transit")
           : el("a", {class:"primary", href:uberLink(b), target:"_blank", rel:"noopener"}, "🚗 Uber"),
-        el("a", {href:"#detail", onclick:e => { e.preventDefault(); map.closePopup(); $("detail").scrollIntoView({behavior:smooth(), block:"start"}); }}, "Details & beer picks")));
+        el("a", {href:"#detail", onclick:e => { e.preventDefault(); map.closePopup(); $("detail").scrollIntoView({behavior:smooth(), block:"start"}); }}, state.mode === "dive" ? "Details & dive check" : "Details & beer picks")));
   }
   function showRouteOnMap(){
     const r = state.route;
@@ -436,21 +605,31 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
 
   // ---------- lists ----------
   function row(b){
-    const w = isWalk(b);
-    return el("li", {}, el("button", {type:"button", class:"row " + (w ? "walk" : "ride"), "aria-pressed":String(b.id === state.selected), onclick:() => select(b.id, false)},
-      el("span", {class:"ico", "aria-hidden":"true"}, w ? "🚶" : "🚗"),
-      el("span", {}, el("span", {class:"name"}, b.name), el("br"), el("span", {class:"sub"}, [b.kind, b.address].filter(Boolean).join(", "))),
-      el("span", {class:"dist"}, `${fmtMi(b.mi)} mi`, el("small", {}, w ? `${walkMin(b.mi)} min walk` : `~${rideMin(b.mi)} min ride`))));
+    const t = travel(b), p = t === "rail" ? railPlan(state.here, b, state.walk) : null;
+    const sub = p ? p.line + (p.transfer ? " + " + p.line2 : "") + " from " + p.from.name
+      : [state.mode === "dive" && isCertified(b) ? "🏆 Certified Dive" : b.kind, b.year ? "since " + b.year : "", b.address].filter(Boolean).join(", ");
+    return el("li", {}, el("button", {type:"button", class:"row " + t, "aria-pressed":String(b.id === state.selected), onclick:() => select(b.id, false)},
+      el("span", {class:"ico", "aria-hidden":"true"}, ICON[t]),
+      el("span", {}, el("span", {class:"name"}, b.name), el("br"), el("span", {class:"sub"}, sub)),
+      el("span", {class:"dist"}, fmtMi(b.mi) + " mi", el("small", {}, t === "walk" ? walkMin(b.mi) + " min walk" : p ? fmtMi(p.walk) + " mi walk + train" : "~" + rideMin(b.mi) + " min ride"))));
   }
   function renderLists(){
-    const walk = state.breweries.filter(isWalk), ride = state.breweries.filter(b => !isWalk(b));
+    const groups = {walk:[], rail:[], ride:[]};
+    for (const b of state.breweries) groups[travel(b)].push(b);
+    const walk = groups.walk, rail = groups.rail, ride = groups.ride;
     $("walkCount").textContent = state.here ? walk.length : "";
+    $("railCount").textContent = state.here ? rail.length : "";
     $("rideCount").textContent = state.here ? ride.length : "";
-    $("walkInfo").textContent = state.here ? `🚶 ${walk.length} walkable, 🚗 ${ride.length} by Uber` : "";
+    $("railGroup").hidden = !rail.length;
+    let info = "🚶 " + walk.length + " walkable, " + (state.railOn ? "🚆 " + rail.length + " by rail, " : "") + "🚗 " + ride.length + " by Uber";
+    if (state.railOn && state.here && !state.rail) info += " (checking rail lines…)";
+    else if (state.railOn && state.rail && state.rail.failed) info += " (rail info didn’t load)";
+    $("walkInfo").textContent = state.here ? info : "";
     $("walkList").replaceChildren(...(walk.length ? walk.map(row)
-      : [el("li", {class:"empty"}, state.here ? "Nothing inside your walking range. Slide the walk distance up, or grab an Uber." : "Walkable breweries show up here.")]));
+      : [el("li", {class:"empty"}, state.here ? "Nothing inside your walking range. Slide the walk distance up, or take the train or an Uber." : "Walkable spots show up here.")]));
+    $("railList").replaceChildren(...rail.map(row));
     $("rideList").replaceChildren(...(ride.length ? ride.map(row)
-      : [el("li", {class:"empty"}, state.here ? "Everything nearby is walkable." : "Breweries worth a ride show up here.")]));
+      : [el("li", {class:"empty"}, state.here ? "Everything nearby is walkable or on the train." : "Spots worth a ride show up here.")]));
   }
 
   // ---------- detail ----------
@@ -465,20 +644,22 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
     const box = $("detail"); box.replaceChildren();
     const b = state.breweries.find(x => x.id === state.selected);
     if (!b) return;
-    const w = isWalk(b), h = state.here;
-    const gm = `https://www.google.com/maps/dir/?api=1&origin=${h.lat},${h.lng}&destination=${enc((b.name + " " + b.address).trim())}&travelmode=${w ? "walking" : "driving"}`;
+    const t = travel(b), h = state.here, p = t === "rail" ? railPlan(h, b, state.walk) : null;
+    const gm = "https://www.google.com/maps/dir/?api=1&origin=" + h.lat + "," + h.lng + "&destination=" + enc((b.name + " " + b.address).trim()) + "&travelmode=" + (t === "walk" ? "walking" : "driving");
+    const how = t === "walk" ? walkMin(b.mi) + " min walk" : p ? "by train" : "about " + rideMin(b.mi) + " min by Uber";
     box.append(el("div", {class:"detail"},
       el("h3", {}, b.name),
-      el("p", {class:"meta"}, `${fmtMi(b.mi)} mi, ${w ? walkMin(b.mi) + " min walk" : "about " + rideMin(b.mi) + " min by Uber"}${b.address ? ", " + b.address : ""}`),
-      b.kind ? el("p", {class:"about"}, b.kind) : null,
+      el("p", {class:"meta"}, fmtMi(b.mi) + " mi, " + how + (b.address ? ", " + b.address : "")),
+      p ? el("p", {class:"about"}, railText(p)) : b.kind ? el("p", {class:"about"}, b.kind) : null,
       el("div", {class:"actions"},
-        w ? el("a", {class:"primary", href:gm, target:"_blank", rel:"noopener"}, "🚶 Walking directions")
+        t === "walk" ? el("a", {class:"primary", href:gm, target:"_blank", rel:"noopener"}, "🚶 Walking directions")
+          : t === "rail" ? el("a", {class:"primary", href:transitLink(h, b), target:"_blank", rel:"noopener"}, "🚆 Transit directions")
           : el("a", {class:"primary", href:uberLink(b), target:"_blank", rel:"noopener"}, "🚗 Open in Uber"),
-        w ? el("a", {href:uberLink(b), target:"_blank", rel:"noopener"}, "🚗 Uber instead")
-          : el("a", {href:gm, target:"_blank", rel:"noopener"}, "Driving directions"),
+        t === "ride" ? el("a", {href:gm, target:"_blank", rel:"noopener"}, "Driving directions")
+          : el("a", {href:uberLink(b), target:"_blank", rel:"noopener"}, "🚗 Uber instead"),
         el("a", {href:untappdLink(b), target:"_blank", rel:"noopener"}, "🍺 Beers on Untappd"),
         b.web ? el("a", {href:b.web, target:"_blank", rel:"noopener"}, "Website") : null),
-      picksBlock(b)));
+      state.mode === "dive" ? diveBlock(b) : picksBlock(b)));
   }
 
   // ---------- beer picks ----------
@@ -514,7 +695,7 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
       const res = await fetch("https://api.anthropic.com/v1/messages", {method:"POST",
         headers:{"content-type":"application/json", "x-api-key":state.apiKey, "anthropic-version":"2023-06-01", "anthropic-dangerous-direct-browser-access":"true"},
         body:JSON.stringify({model:"claude-haiku-5-5", max_tokens:900, messages:[{role:"user", content:prompt}]})});
-      if (res.status === 401) throw new Error("That API key didn’t work. Check it under “Use your own API key” below.");
+      if (res.status === 401) throw new Error("That API key didn’t work. Check or remove it below.");
       if (!res.ok) throw new Error("Claude didn’t respond. Try again in a moment, or use Ask Claude.");
       const text = (await res.json()).content.map(c => c.text || "").join("");
       const d = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1));
@@ -542,7 +723,7 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
     const p = state.picks[b.id];
     box.append(el("p", {class:"hint"}, "Based on: " + likes()));
     const acts = el("div", {class:"actions"});
-    if (state.apiKey) acts.append(el("button", {type:"button", class:"btn", disabled:!!(p && p.loading), onclick:() => getPicks(b)}, p && !p.loading ? "Refresh picks" : "🍺 Get beer picks"));
+    if (state.apiKey) acts.append(el("button", {type:"button", class:"btn", disabled:!!(p && p.loading), onclick:() => getPicks(b)}, p && p.error ? "Try again" : p && !p.loading ? "Refresh picks" : "🍺 Get beer picks"));
     acts.append(el("a", {class:state.apiKey ? null : "primary", href:claudeLink([b]), target:"_blank", rel:"noopener"}, state.apiKey ? "Ask Claude (checks live tap list)" : "🍺 Ask Claude for picks"));
     box.append(acts);
     if (p && p.loading) box.append(el("p", {class:"hint", "aria-live":"polite"}, "Matching this brewery’s beers to what you like…"));
@@ -562,6 +743,92 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
     return box;
   }
 
+  // ---------- dive bar mode ----------
+  const OLD_YEAR = new Date().getFullYear() - 40;
+  const RULES = [
+    {k:"age", label:"Open 40+ years (since " + OLD_YEAR + " or earlier)"},
+    {k:"price", label:"A drink for $4 or under, any time"},
+    {k:"carpet", label:"Carpet on the floor or walls"},
+    {k:"onestar", label:"At least 10 one-star reviews"}
+  ];
+  const RULE_TEXT = "My dive bar rules: it opened in " + OLD_YEAR + " or earlier (40+ years old), always has at least one drink for $4 or under, has carpet on the floor or walls, and has at least 10 one-star reviews on Google or Yelp.";
+  function diveChecks(b){
+    const s = state.dive[b.id] || {};
+    return {age:s.age != null ? !!s.age : !!(b.year && b.year <= OLD_YEAR), price:!!s.price, carpet:!!s.carpet, onestar:!!s.onestar};
+  }
+  function isCertified(b){ const c = diveChecks(b); return RULES.every(r => c[r.k]); }
+  function setCheck(b, k, v){
+    const c = diveChecks(b); c[k] = v;
+    state.dive[b.id] = c; store.set("bw.dive", state.dive);
+    renderAll(false);
+  }
+  const photosLink = b => "https://www.google.com/maps/search/?api=1&query=" + enc((b.name + " " + (b.address || (b.lat + "," + b.lng))).trim());
+  const yelpLink = b => "https://www.yelp.com/search?find_desc=" + enc(b.name) + "&find_loc=" + enc(b.address || (b.lat + "," + b.lng));
+  function vetLink(stops){
+    const where = stops.map(b => b.name + " (" + (b.address || (b.lat.toFixed(5) + ", " + b.lng.toFixed(5))) + ")").join("; ");
+    const q = (stops.length > 1 ? "I'm planning a dive bar crawl, in this order: " : "I'm thinking about going to ") + where + ". " + RULE_TEXT +
+      " Check Google and Yelp reviews, photos, and menus (search the web), then tell me " + (stops.length > 1 ? "for each stop " : "") +
+      "which rules it passes or fails, with the evidence, and whether it's a true dive.";
+    return "https://claude.ai/new?q=" + enc(q.slice(0, 1800));
+  }
+  function findDivesLink(){
+    const typed = $("placeInput").value.trim();
+    const loc = typed || (state.here.lat.toFixed(5) + ", " + state.here.lng.toFixed(5));
+    const q = "Find dive bars within about " + DIVE_RADIUS + " miles of " + loc + " that pass all of my rules. " + RULE_TEXT +
+      " Search reviews, photos, and menus, then list the best matches with their addresses and the evidence for each rule.";
+    return "https://claude.ai/new?q=" + enc(q.slice(0, 1800));
+  }
+  function renderDiveFind(){
+    const box = $("diveFind");
+    box.hidden = !(state.mode === "dive" && state.here);
+    if (box.hidden) return;
+    box.replaceChildren(el("a", {class:"primary", href:findDivesLink(), target:"_blank", rel:"noopener"}, "🔍 Ask Claude to find dives that pass every rule"));
+  }
+  function diveBlock(b){
+    const c = diveChecks(b);
+    const box = el("div", {class:"picks"}, el("h4", {}, isCertified(b) ? "🏆 Certified Dive" : "Dive check"));
+    if (b.img) box.append(el("img", {class:"divephoto", src:b.img, alt:"Photo of " + b.name, loading:"lazy", onerror:e => e.target.remove()}));
+    box.append(el("div", {class:"actions"},
+      el("a", {class:"primary", href:vetLink([b]), target:"_blank", rel:"noopener"}, "🔍 Vet this dive with Claude"),
+      el("a", {href:photosLink(b), target:"_blank", rel:"noopener"}, "📷 Photos & reviews"),
+      el("a", {href:yelpLink(b), target:"_blank", rel:"noopener"}, "Yelp")));
+    const list = el("div", {class:"checks"});
+    for (const r of RULES) {
+      const note = r.k === "age" && b.year ? (b.year <= OLD_YEAR ? " (OpenStreetMap lists " + b.year + ")" : " (OpenStreetMap lists " + b.year + ", too new)") : "";
+      list.append(el("label", {class:"check"},
+        el("input", {type:"checkbox", checked:c[r.k], onchange:e => setCheck(b, r.k, e.target.checked)}),
+        el("span", {}, r.label, note ? el("small", {}, note) : null)));
+    }
+    box.append(list, el("p", {class:"hint"}, "Tick each rule once you or Claude confirm it. All four makes it a Certified Dive. Checks are saved on this device only."));
+    return box;
+  }
+  function applyModeText(){
+    const dive = state.mode === "dive";
+    $("modeBrew").setAttribute("aria-checked", String(!dive));
+    $("modeDive").setAttribute("aria-checked", String(dive));
+    $("title").innerHTML = dive ? "Dive Bar<br>Walk" : "Brewery<br>Walk";
+    $("lede").textContent = dive ? "Find old-school dives near you. 🚶 means you can walk it; 🚗 means call an Uber." : "Find taprooms near where you’re standing. 🚶 means you can walk it; 🚗 means call an Uber.";
+    $("go").textContent = dive ? "Find dive bars near me" : "Find breweries near me";
+    $("startLabel").textContent = dive ? "Start at a bar" : "Start at a brewery";
+    $("startInput").placeholder = dive ? "Type a bar name, or leave blank" : "Type a brewery name, or leave blank";
+    document.querySelector(".favs").hidden = dive;
+    document.title = dive ? "Dive Bar Walk" : "Brewery Walk";
+  }
+  async function setMode(m){
+    if (state.mode === m || state.busy) return;
+    state.mode = m; store.set("bw.mode", m);
+    state.start = null; state.selected = null; state.skip = new Set(); state.breweries = [];
+    $("startInput").value = ""; $("startClear").hidden = true; $("startList").hidden = true;
+    applyModeText();
+    if (state.here) {
+      state.busy = true;
+      setStatus(m === "dive" ? "Finding bars nearby…" : "Finding breweries nearby…");
+      try { await refreshBreweries(true); } finally { state.busy = false; }
+    } else { setStatus(""); renderAll(false); }
+  }
+  $("modeBrew").addEventListener("click", () => setMode("brew"));
+  $("modeDive").addEventListener("click", () => setMode("dive"));
+
   // ---------- crawl ----------
   function bindCrawl(){
     const c = state.crawl;
@@ -580,29 +847,38 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
   // Best crawl: most stops (up to the target), then least walking.
   function buildCrawl(){
     const c = state.crawl, pool = state.breweries.filter(b => !state.skip.has(b.id)).slice(0, 25);
-    let best = {stops:[], walk:0, ride:0}, steps = 0;
-    const used = new Set(), path = [], score = (w, r) => w + r * 0.05;
+    let best = {stops:[], legs:[], walk:0, ride:0}, steps = 0;
+    const used = new Set(), path = [], legs = [];
+    const score = (w, r, lg) => w + r * 0.05 + lg.filter(x => x === "rail").length * 0.3;
     const start = state.start ? state.breweries.find(b => b.id === state.start.id) : null;
     function dfs(cur, walk, ride){
       if (++steps > 300000) return;
-      if (path.length && (path.length > best.stops.length || (path.length === best.stops.length && score(walk, ride) < score(best.walk, best.ride))))
-        best = {stops:[...path], walk, ride};
+      if (path.length && (path.length > best.stops.length || (path.length === best.stops.length && score(walk, ride, legs) < score(best.walk, best.ride, best.legs))))
+        best = {stops:[...path], legs:[...legs], walk, ride};
       if (path.length >= c.stops) return;
       for (const b of pool) {
         if (used.has(b.id)) continue;
-        let w = walk, r = ride;
-        if (!cur) { if (c.uber) r = b.mi; else { if (b.mi > state.walk) continue; w += b.mi; } }
-        else { const d = miles(cur, b); if (d > c.leg) continue; w += d; }
+        let w = walk, r = ride, leg = "walk";
+        if (!cur) {
+          if (c.uber) { r = b.mi; leg = "ride"; }
+          else if (b.mi <= state.walk) w += b.mi;
+          else { const p = state.railOn && railPlan(state.here, b, state.walk); if (!p) continue; w += p.walk; leg = "rail"; }
+        } else {
+          const d = miles(cur, b);
+          if (d <= c.leg) w += d;
+          else { const p = state.railOn && railPlan(cur, b, c.leg); if (!p) continue; w += p.walk; leg = "rail"; }
+        }
         if (w > c.total) continue;
-        used.add(b.id); path.push(b); dfs(b, w, r); path.pop(); used.delete(b.id);
+        used.add(b.id); path.push(b); legs.push(leg); dfs(b, w, r); path.pop(); legs.pop(); used.delete(b.id);
       }
     }
     if (start) {
-      const fr = c.uber || start.mi > state.walk;
-      used.add(start.id); path.push(start);
-      dfs(start, fr ? 0 : start.mi, fr ? start.mi : 0);
-      best.firstRide = fr;
-    } else { dfs(null, 0, 0); best.firstRide = c.uber; }
+      const p0 = !c.uber && start.mi > state.walk && state.railOn ? railPlan(state.here, start, state.walk) : null;
+      const fr = !p0 && (c.uber || start.mi > state.walk);
+      used.add(start.id); path.push(start); legs.push(p0 ? "rail" : fr ? "ride" : "walk");
+      dfs(start, p0 ? p0.walk : fr ? 0 : start.mi, fr ? start.mi : 0);
+    } else dfs(null, 0, 0);
+    best.firstRide = best.legs[0] === "ride";
     return best;
   }
   function resetSkips(){
@@ -622,8 +898,13 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
     const s = r.stops, list = el("ol", {class:"stops"});
     let prev = null;
     s.forEach((b, i) => {
-      const d = prev ? miles(prev, b) : b.mi, ride = !prev && r.firstRide;
-      list.append(el("li", {class:"leg" + (ride ? " ride" : "")}, ride ? `🚗 ${fmtMi(d)} mi by Uber, about ${rideMin(d)} min` : `🚶 ${fmtMi(d)} mi, ${walkMin(d)} min walk`));
+      const d = prev ? miles(prev, b) : b.mi, kind = r.legs[i] || "walk";
+      let text = "🚶 " + fmtMi(d) + " mi, " + walkMin(d) + " min walk";
+      if (kind === "ride") text = "🚗 " + fmtMi(d) + " mi by Uber, about " + rideMin(d) + " min";
+      if (kind === "rail") { const rp = railPlan(prev || state.here, b, prev ? c.leg : state.walk); text = rp ? railText(rp) : "🚆 By train"; }
+      const legLi = el("li", {class:"leg " + kind}, text);
+      if (kind === "rail") legLi.append(el("a", {href:transitLink(prev || state.here, b), target:"_blank", rel:"noopener"}, "Live times"));
+      list.append(legLi);
       list.append(el("li", {class:"stop"},
         el("span", {class:"n", "aria-hidden":"true"}, i + 1),
         el("button", {type:"button", class:"sname", onclick:() => select(b.id, true)}, b.name),
@@ -640,13 +921,15 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
     const origin = r.firstRide ? place(s[0]) : `${state.here.lat},${state.here.lng}`;
     const acts = el("div", {class:"actions"});
     if (r.firstRide) acts.append(el("a", {class:"primary", href:uberLink(s[0]), target:"_blank", rel:"noopener"}, "🚗 Uber to stop 1"));
-    if (walkStops.length) {
+    if (r.legs.includes("rail")) out.append(el("p", {class:"note"}, "Walking total includes getting to and from stations. Tap “Live times” on a 🚆 leg for schedules."));
+    if (walkStops.length && !r.legs.includes("rail")) {
       const wp = walkStops.slice(0, -1).map(place).join("%7C");
       const gm = `https://www.google.com/maps/dir/?api=1&origin=${origin}&destination=${place(walkStops[walkStops.length - 1])}${wp ? "&waypoints=" + wp : ""}&travelmode=walking`;
       acts.append(el("a", {class:r.firstRide ? null : "primary", href:gm, target:"_blank", rel:"noopener"}, "🚶 Walking route in Google Maps"));
     }
     acts.append(el("button", {type:"button", class:"skip", onclick:showRouteOnMap}, "Show on map"));
-    if (state.favs.length) acts.append(el("a", {href:claudeLink(s), target:"_blank", rel:"noopener"}, "🍺 Beer picks for every stop"));
+    if (state.mode === "dive") acts.append(el("a", {href:vetLink(s), target:"_blank", rel:"noopener"}, "🔍 Vet every stop with Claude"));
+    else if (state.favs.length) acts.append(el("a", {href:claudeLink(s), target:"_blank", rel:"noopener"}, "🍺 Beer picks for every stop"));
     out.append(acts);
     if (state.skip.size) out.append(resetSkips());
   }
@@ -657,6 +940,11 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
     clearTimeout(searchTimer);
     const q = $("startInput").value.trim();
     if (q.length < 2) { $("startList").hidden = true; return; }
+    if (state.mode === "dive") {
+      const n = q.toLowerCase();
+      renderSuggest(state.breweries.filter(b => b.name.toLowerCase().includes(n)).slice(0, 8).map(b => Object.assign({}, b, {d:b.mi})));
+      return;
+    }
     searchTimer = setTimeout(async () => {
       searchCtl?.abort(); searchCtl = new AbortController();
       try {
@@ -699,13 +987,19 @@ footer{margin-top:28px;color:var(--muted);font-size:13px}
   // ---------- walk slider + render ----------
   function renderWalkOut(){ $("walkOut").textContent = fmtD(state.walk); }
   $("walk").value = state.walk;
+  $("railOn").checked = state.railOn;
+  $("railOn").addEventListener("change", e => {
+    state.railOn = e.target.checked; store.set("bw.rail", state.railOn);
+    if (state.railOn && !state.rail) loadRail();
+    railCache.clear(); renderAll(false);
+  });
   $("walk").addEventListener("input", e => { state.walk = Number(e.target.value); store.set("bw.walk", state.walk); renderWalkOut(); schedule(); });
 
   function renderAll(fit){
     state.route = state.here && state.breweries.length ? buildCrawl() : null;
-    renderMap(fit); renderLists(); renderDetail(); renderCrawl();
+    renderMap(fit); renderLists(); renderDetail(); renderCrawl(); renderDiveFind();
   }
-  bindCrawl(); renderWalkOut(); renderFavs(); renderAll(false);
+  bindCrawl(); renderWalkOut(); renderFavs(); applyModeText(); renderAll(false);
   // Fill the slider track up to the thumb so the value is visible at a glance.
   document.querySelectorAll('input[type=range]').forEach(r => {
     const fill = () => r.style.setProperty("--fill", ((r.value - r.min) / (r.max - r.min) * 100) + "%");
